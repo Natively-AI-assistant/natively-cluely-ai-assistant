@@ -54,6 +54,8 @@ function rejectionText(error: unknown, model: string): string {
   const text = [
     source?.message,
     source?.error?.message,
+    typeof source?.error?.type === 'string' ? source.error.type : '',
+    typeof source?.error?.error?.type === 'string' ? source.error.error.type : '',
     typeof source?.error === 'string' ? source.error : '',
     source?.response?.data?.message,
     source?.response?.data?.error?.message,
@@ -88,6 +90,46 @@ export function opencodeRejectsOutputCap(error: unknown, model: string): boolean
 export function opencodeRejectsReasoning(error: unknown, model: string): boolean {
   const status = rejectionStatus(error);
   return (status === 400 || status === 422) && REASONING_WORDS.test(rejectionText(error, model));
+}
+
+/**
+ * The Go route refused the request in a way that may mean "this key has no
+ * Go" (or no longer has it): a 403 (Go documents `EntitlementError` 403 for
+ * "Keys Go doesn't cover"), a 402, or a 400/404 that names OpenCode Go
+ * ("Model X isn't included in OpenCode Go").
+ *
+ * This is only a TRIGGER: LLMHelper re-reads the key's Go access from the
+ * usage endpoint before deciding anything, because the same words can be about
+ * one model or one moment. Never a 401 (an invalid key fails on every route)
+ * and never a 429 (a Go subscriber at a limit: moving them onto pay-as-you-go
+ * credits is OpenCode's Extra Usage setting to decide, not ours).
+ */
+export function opencodeGoRefused(error: unknown, model: string): boolean {
+  const status = rejectionStatus(error);
+  if (status === 402 || status === 403) return true;
+  const text = rejectionText(error, model);
+  if (/entitlementerror/.test(text)) return true;
+  return (status === 400 || status === 404) && /opencode go/.test(text);
+}
+
+/**
+ * The pay-as-you-go base refused the key for balance with words about Go
+ * (measured live 2026-11-25: "Insufficient balance. … OpenCode Go covers only
+ * requests to the OpenCode Go provider."). Also a TRIGGER only: the same
+ * sentence may reach a key with no Go and no credit, so the Go route is tried
+ * only once the usage endpoint says the key has Go (or cannot be read).
+ */
+export function opencodePaygWantsGo(error: unknown, model: string): boolean {
+  return rejectionStatus(error) === 402 && /opencode go/.test(rejectionText(error, model));
+}
+
+/** A Go-only model refused because the key has no Go subscription. */
+export function opencodeGoOnlyError(error: unknown, model: string): Error {
+  const name = bareModelName(model);
+  return Object.assign(
+    new Error(`${name} did not produce an answer. It is only available with OpenCode Go, which this key does not include. Pick another model.`),
+    { status: rejectionStatus(error) || undefined, provider: 'opencode', cause: error },
+  );
 }
 
 /**

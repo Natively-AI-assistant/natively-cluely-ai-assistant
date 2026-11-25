@@ -243,7 +243,10 @@ describe('the cold-start heuristic matches the live split', () => {
 });
 
 describe('Go merge', () => {
-  test('Go wins on collision and keeps fields it omits', () => {
+  // The Go list is public (200 with no key, live 2026-11-25), so a collision
+  // must never replace the pay-as-you-go route: that sent every key's shared
+  // models to the Go-only base. Go is recorded beside it instead.
+  test('a collision keeps the pay-as-you-go route and records Go beside it', () => {
     const main = parseOpencodeCatalogue([chat('glm-5.3', { limit: { context: 1000000, output: 131072 } })]);
     const go = parseOpencodeCatalogue([{
       id: 'glm-5.3',
@@ -253,11 +256,52 @@ describe('Go merge', () => {
       limit: { context: 500000 },
     }], { go: true });
     const merged = mergeOpencodeCatalogues(main, go);
-    assert.equal(merged['glm-5.3'].api, 'generate-content');
+    assert.equal(merged['glm-5.3'].api, 'chat-completions');
+    assert.equal(merged['glm-5.3'].baseUrl, OPENAI_BASE);
+    // The route carries Go's own reasoning answer (none listed here = false).
+    assert.deepEqual(merged['glm-5.3'].goRoute, { api: 'generate-content', baseUrl: 'https://opencode.ai/inference/google', reasoning: false });
+    assert.equal(merged['glm-5.3'].goOnly, undefined);
     assert.equal(merged['glm-5.3'].go, true);
     // Go did not list output; main's ceiling survives.
     assert.equal(merged['glm-5.3'].outputTokens, 131072);
-    assert.equal(merged['glm-5.3'].contextTokens, 500000);
+    assert.equal(merged['glm-5.3'].contextTokens, 1000000);
+  });
+
+  test('a collision takes the safer capabilities of the two routes', () => {
+    const main = parseOpencodeCatalogue([chat('qwen3.8-max', {
+      modalities: { input: ['text', 'image/png'] }, limit: { output: 131072 },
+    })]);
+    const go = parseOpencodeCatalogue([chat('qwen3.8-max', {
+      modalities: { input: ['text'] }, limit: { output: 65536 },
+    })], { go: true });
+    const merged = mergeOpencodeCatalogues(main, go);
+    // Either route may serve the turn; a text-only route answers an image blind.
+    assert.equal(merged['qwen3.8-max'].vision, false);
+    assert.equal(merged['qwen3.8-max'].outputTokens, 65536);
+  });
+
+  test('a Go-only model is marked goOnly with the Go route', () => {
+    const go = parseOpencodeCatalogue([chat('hy4', {
+      api: { 'chat-completions': { base_url: 'https://opencode.ai/inference/go/openai/v1' } },
+    })], { go: true });
+    const merged = mergeOpencodeCatalogues({}, go);
+    assert.equal(merged.hy4.goOnly, true);
+    assert.equal(merged.hy4.baseUrl, 'https://opencode.ai/inference/go/openai/v1');
+    assert.equal(merged.hy4.goRoute.api, 'chat-completions');
+    assert.equal(merged.hy4.goRoute.baseUrl, 'https://opencode.ai/inference/go/openai/v1');
+  });
+
+  test('each route keeps its own reasoning levels (kimi-k3, live 2026-11-25)', () => {
+    const main = parseOpencodeCatalogue([chat('kimi-k3', {
+      capabilities: { reasoning: { supported: true, toggle: true, effort: ['low', 'high', 'max'] } },
+    })]);
+    const go = parseOpencodeCatalogue([chat('kimi-k3', {
+      api: { 'chat-completions': { base_url: 'https://opencode.ai/inference/go/openai/v1' } },
+      capabilities: { reasoning: { supported: true, effort: ['max'] } },
+    })], { go: true });
+    const merged = mergeOpencodeCatalogues(main, go);
+    assert.deepEqual(merged['kimi-k3'].reasoningEffort, ['low', 'high', 'max'], 'pay-as-you-go levels on the entry');
+    assert.deepEqual(merged['kimi-k3'].goRoute.reasoningEffort, ['max'], 'Go levels on the Go route');
   });
 
   test('a main-only model is untouched', () => {

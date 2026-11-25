@@ -17,9 +17,11 @@ import {
     isFreeOpencodeModel,
     mergeOpencodeCatalogues,
     opencodeDisplayName,
+    opencodeOfferedIds,
     parseOpencodeCatalogue,
 } from '../llm/opencode/catalog';
-import type { OpencodeModelMeta } from '../llm/opencode/types';
+import type { OpencodeGoAccess, OpencodeModelMeta } from '../llm/opencode/types';
+import { probeOpencodeGoAccess } from '../llm/opencode/probe';
 
 export interface ProviderModel {
     id: string;
@@ -566,6 +568,13 @@ export interface OpencodeCatalogueResult {
     vision: string[];
     /** How many free-tier ids were withheld (they answer 403 outside OpenCode). */
     freeSkipped: number;
+    /**
+     * Whether THIS key has OpenCode Go, from Go's usage endpoint, read beside
+     * the catalogues. `unknown` when it could not be read.
+     */
+    goAccess: OpencodeGoAccess;
+    /** False when the Go list could not be read, so `meta` has no Go routes. */
+    goListRead: boolean;
 }
 
 interface OpencodeCatalogueCacheEntry {
@@ -584,6 +593,25 @@ export function __resetOpencodeCatalogueCache(): void {
     opencodeCatalogueCache = null;
 }
 
+/**
+ * Where the fetcher reads the saved key's Go access when the usage endpoint
+ * could not be read this time, so every list it returns (including the
+ * background LiveModelCatalogService refresh) still hides Go-only models from
+ * a key known to lack Go. Installed by ipcHandlers; this module stays free of
+ * Electron.
+ */
+let opencodeGoAccessReader: () => OpencodeGoAccess = () => 'unknown';
+export function setOpencodeGoAccessReader(reader: () => OpencodeGoAccess): void {
+    opencodeGoAccessReader = reader;
+}
+
+/** The picker list for this key: Go-only models dropped once Go is known absent. */
+function offeredOpencodeModels(result: OpencodeCatalogueResult, goAccess: OpencodeGoAccess): OpencodeCatalogueResult {
+    if (goAccess !== 'no') return result;
+    const offered = new Set(opencodeOfferedIds(result.meta, goAccess).map((id) => `opencode/${id}`));
+    return { ...result, models: result.models.filter((m) => offered.has(m.id)) };
+}
+
 function countFreeModels(payload: unknown): number {
     const raw: unknown = Array.isArray(payload)
         ? payload
@@ -597,28 +625,48 @@ function countFreeModels(payload: unknown): number {
  *
  * The paid list is required: a failure there is a real failure and propagates
  * to the caller (the IPC layer sanitises it into a user-facing message). The
- * Go list is optional — a key without a Go subscription cannot read it — so a
- * failure is ignored rather than blocking the provider.
+ * Go list is optional, so a failure is ignored rather than blocking the
+ * provider. It is also PUBLIC (200 with no key, checked live 2026-11-25), so
+ * reading it proves nothing about the key: the merge keeps Go as a separate
+ * route, and LLMHelper learns from real requests whether this key may use it.
  *
  * Writes nothing to credentials: the caller applies the routing metadata
  * (ipcHandlers' applyOpencodeCatalogue, the one writer). Like
  * fetchOpenRouterModels it DOES publish the per-model vision answers to the
  * vision store, because those are facts about models, not about a key.
  */
-export async function fetchOpencodeCatalogue(apiKey: string): Promise<OpencodeCatalogueResult> {
+export async function fetchOpencodeCatalogue(
+    apiKey: string,
+    opts: {
+        goAccess?: OpencodeGoAccess;
+        /** Test seams: the catalogue GET and the usage-probe fetch. */
+        getImpl?: (url: string, config: { headers: Record<string, string>; timeout: number }) => Promise<{ data: unknown }>;
+        fetchImpl?: typeof fetch;
+    } = {},
+): Promise<OpencodeCatalogueResult> {
     const key = (apiKey || '').trim();
+    // The list is filtered with THIS key's own answer when the usage endpoint
+    // gave one; the saved answer (or the caller's) only stands in for it.
+    const accessFor = (result: OpencodeCatalogueResult): OpencodeGoAccess => {
+        if (result.goAccess !== 'unknown') return result.goAccess;
+        if (opts.goAccess) return opts.goAccess;
+        try { return opencodeGoAccessReader(); } catch { return 'unknown'; }
+    };
     if (opencodeCatalogueCache && opencodeCatalogueCache.apiKey === key
         && Date.now() - opencodeCatalogueCache.at < OPENCODE_CATALOGUE_CACHE_MS) {
-        return opencodeCatalogueCache.result;
+        const cached = opencodeCatalogueCache.result;
+        return offeredOpencodeModels(cached, accessFor(cached));
     }
 
     const headers = { Authorization: `Bearer ${key}` };
     // Both reads at once. A dead main key still fails the whole call — the main
     // read is awaited as-is, and the Go read can only ever resolve to null — so
     // a Go read that happened to succeed cannot mask it.
-    const [mainResponse, goResponse] = await Promise.all([
-        axios.get(OPENCODE_MODELS_URL, { headers, timeout: 15000 }),
-        axios.get(OPENCODE_GO_MODELS_URL, { headers, timeout: 15000 }).catch(() => null),
+    const get = opts.getImpl || ((url: string, config: { headers: Record<string, string>; timeout: number }) => axios.get(url, config));
+    const [mainResponse, goResponse, probedGo] = await Promise.all([
+        get(OPENCODE_MODELS_URL, { headers, timeout: 15000 }),
+        get(OPENCODE_GO_MODELS_URL, { headers, timeout: 15000 }).catch(() => null),
+        probeOpencodeGoAccess(key, { timeoutMs: 8000, fetchImpl: opts.fetchImpl }).catch(() => 'unknown' as OpencodeGoAccess),
     ]);
 
     const main = parseOpencodeCatalogue(mainResponse.data);
@@ -637,6 +685,8 @@ export async function fetchOpencodeCatalogue(apiKey: string): Promise<OpencodeCa
         meta,
         vision: Object.entries(meta).filter(([, m]) => m.vision === true).map(([id]) => id),
         freeSkipped: countFreeModels(mainResponse.data) + (goResponse ? countFreeModels(goResponse.data) : 0),
+        goAccess: probedGo,
+        goListRead: !!goResponse,
     };
 
     // Publish the per-model answer where the vision resolver reads it. Without
@@ -658,6 +708,8 @@ export async function fetchOpencodeCatalogue(apiKey: string): Promise<OpencodeCa
         console.warn('[modelFetcher] could not publish OpenCode vision answers:', e?.message);
     }
 
+    // Cached whole: the routing metadata keeps Go-only entries either way, and
+    // only the picker list depends on the key's Go access.
     opencodeCatalogueCache = { apiKey: key, at: Date.now(), result };
-    return result;
+    return offeredOpencodeModels(result, accessFor(result));
 }

@@ -19,7 +19,9 @@
  * 2026-11-19, while the wrong-key branches are covered by unit tests only.
  */
 
+import type { OpencodeGoAccess } from './types';
 import {
+  OPENCODE_GO_USAGE_URL,
   OPENCODE_MODELS_URL,
   OPENCODE_PROBE_MODEL,
   OPENCODE_OPENAI_BASE,
@@ -175,4 +177,38 @@ export async function probeOpencode(
   // this probe needs to prove. A 200 would mean the id resolved, which is not
   // an error either (some gateways accept anything).
   return { ok: true, status: resp.status };
+}
+
+/**
+ * Does this key have OpenCode Go? Read from Go's usage endpoint, never guessed
+ * from a chat error: one refusal can be about a model, a moment or a limit,
+ * and the Go model list is public, so neither says anything about the KEY.
+ *
+ *   200                       → 'yes'
+ *   403 (EntitlementError)    → 'no'      ("Keys Go doesn't cover", documented)
+ *   401, other, network, 5xx  → 'unknown' (an invalid key is not "no Go": it
+ *                                          fails everywhere, and the chat error
+ *                                          says so)
+ *
+ * Free: a GET with no generation. Never throws.
+ */
+export async function probeOpencodeGoAccess(
+  apiKey: string,
+  options: OpencodeProbeOptions = {},
+): Promise<OpencodeGoAccess> {
+  const key = (apiKey || '').trim();
+  if (!key) return 'unknown';
+  const doFetch = options.fetchImpl || fetch;
+  try {
+    const resp = await doFetch(OPENCODE_GO_USAGE_URL, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(options.timeoutMs ?? 8000),
+    });
+    if (resp.status === 200) return 'yes';
+    if (resp.status === 403) return 'no';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }

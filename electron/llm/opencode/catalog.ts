@@ -16,11 +16,18 @@
 
 import {
   OPENCODE_ANTHROPIC_BASE,
+  OPENCODE_GO_OPENAI_BASE,
   OPENCODE_GOOGLE_BASE,
   OPENCODE_INFERENCE_BASE,
   OPENCODE_OPENAI_BASE,
 } from './constants';
-import { OPENCODE_API_FAMILIES, type OpencodeApiFamily, type OpencodeModelMeta } from './types';
+import {
+  OPENCODE_API_FAMILIES,
+  type OpencodeApiFamily,
+  type OpencodeGoAccess,
+  type OpencodeModelMeta,
+  type OpencodeRoute,
+} from './types';
 
 /** The base URL each family uses when the catalogue does not name one. */
 export function opencodeFamilyBaseUrl(family: OpencodeApiFamily): string {
@@ -218,10 +225,15 @@ export function parseOpencodeCatalogue(
 /**
  * Merge the paid catalogue and the Go catalogue.
  *
- * Go wins on an id collision: a key that can see the Go list has already paid
- * for those models, and a key that cannot never receives the list, so the
- * collision cannot mislead a non-subscriber. Fields the Go entry omits fall
- * back to the main entry rather than being erased.
+ * The Go list is PUBLIC (`/go/v1/models` answers 200 with no key, checked live
+ * 2026-11-25), so being in it says nothing about whether the saved key has a
+ * Go subscription. A collision therefore never replaces the pay-as-you-go
+ * route: the Go route is recorded beside it as `goRoute`, and LLMHelper picks
+ * between them from what the key has shown it can use.
+ *
+ * Capabilities are merged conservatively, because either route may serve the
+ * turn: vision only when both say so (a route that cannot read the image
+ * answers HTTP 200 anyway), and the smaller output ceiling.
  */
 export function mergeOpencodeCatalogues(
   main: Record<string, OpencodeModelMeta>,
@@ -229,19 +241,132 @@ export function mergeOpencodeCatalogues(
 ): Record<string, OpencodeModelMeta> {
   const merged: Record<string, OpencodeModelMeta> = { ...main };
   for (const [id, meta] of Object.entries(go)) {
+    const goRoute: OpencodeRoute = {
+      api: meta.api,
+      baseUrl: meta.baseUrl,
+      ...(meta.reasoning !== undefined ? { reasoning: meta.reasoning } : {}),
+      ...(meta.reasoningEffort !== undefined ? { reasoningEffort: meta.reasoningEffort } : {}),
+    };
     const base = merged[id];
+    if (!base) {
+      merged[id] = { ...meta, goRoute, goOnly: true, go: true };
+      continue;
+    }
+    const outputs = [base.outputTokens, meta.outputTokens].filter((n): n is number => typeof n === 'number');
     merged[id] = {
-      ...(base || { api: meta.api, baseUrl: meta.baseUrl, vision: meta.vision }),
-      ...meta,
-      vision: meta.vision || base?.vision === true,
-      contextTokens: meta.contextTokens ?? base?.contextTokens,
-      outputTokens: meta.outputTokens ?? base?.outputTokens,
-      reasoningEffort: meta.reasoningEffort ?? base?.reasoningEffort,
-      name: meta.name ?? base?.name,
+      ...base,
+      goRoute,
       go: true,
+      vision: base.vision === true && meta.vision === true,
+      contextTokens: base.contextTokens ?? meta.contextTokens,
+      outputTokens: outputs.length ? Math.min(...outputs) : undefined,
+      reasoningEffort: base.reasoningEffort ?? meta.reasoningEffort,
+      name: base.name ?? meta.name,
     };
   }
   return merged;
+}
+
+export type OpencodeRouteChoice = OpencodeRoute & { kind: 'payg' | 'go' };
+
+/** Metadata the first revision of this provider persisted: `baseUrl` already
+ *  overwritten with a Go base, and no `goRoute`. */
+function isLegacyGoShape(meta: OpencodeModelMeta): boolean {
+  return !meta.goRoute && !meta.goOnly && /\/inference\/go\//.test(meta.baseUrl || '');
+}
+
+/**
+ * The routes this model can be reached by, preferred first.
+ *
+ * - Pay-as-you-go only, or no catalogue entry: that one route.
+ * - Go only: the Go route.
+ * - Both: Go first unless the key is known to lack Go. A Go subscriber's key
+ *   answers 402 "Insufficient balance … OpenCode Go covers only requests to the
+ *   OpenCode Go provider" on the pay-as-you-go base (checked live 2026-11-25),
+ *   so Go first is what makes the subscription work.
+ *
+ * Whether the second route may actually be TRIED is LLMHelper's decision, and
+ * it depends on the key's Go access, never on the order alone: a key with Go
+ * is never moved onto pay-as-you-go credits by Natively (OpenCode's own Extra
+ * Usage setting decides that).
+ */
+export function opencodeRoutes(
+  id: string,
+  meta: OpencodeModelMeta | undefined,
+  goAccess: OpencodeGoAccess = 'unknown',
+): OpencodeRouteChoice[] {
+  if (!meta) {
+    const api = resolveOpencodeFamily(id);
+    return [{ api, baseUrl: opencodeFamilyBaseUrl(api), kind: 'payg' }];
+  }
+  if (meta.goOnly) {
+    const route = meta.goRoute || { api: meta.api, baseUrl: meta.baseUrl };
+    return [{ ...route, kind: 'go' }];
+  }
+  if (isLegacyGoShape(meta)) {
+    // Read once after upgrading from the first revision, until the next
+    // catalogue fetch rewrites it: the stored base IS the Go route, and the
+    // pay-as-you-go route is the family default.
+    const go: OpencodeRouteChoice = { api: meta.api, baseUrl: meta.baseUrl, kind: 'go' };
+    const payg: OpencodeRouteChoice = { api: meta.api, baseUrl: opencodeFamilyBaseUrl(meta.api), kind: 'payg' };
+    return goAccess === 'no' ? [payg, go] : [go, payg];
+  }
+  const payg: OpencodeRouteChoice = { api: meta.api, baseUrl: meta.baseUrl, kind: 'payg' };
+  if (!meta.goRoute) return [payg];
+  const go: OpencodeRouteChoice = { ...meta.goRoute, kind: 'go' };
+  return goAccess === 'no' ? [payg, go] : [go, payg];
+}
+
+/** The metadata a route is sent with: the model's entry, with the route's own
+ *  protocol, base and (when it lists them) reasoning levels. */
+export function opencodeMetaForRoute(meta: OpencodeModelMeta, route: OpencodeRouteChoice): OpencodeModelMeta {
+  return {
+    ...meta,
+    api: route.api,
+    baseUrl: route.baseUrl,
+    ...(route.reasoning !== undefined ? { reasoning: route.reasoning } : {}),
+    ...(route.reasoningEffort !== undefined || route.reasoning !== undefined
+      ? { reasoningEffort: route.reasoningEffort }
+      : {}),
+  };
+}
+
+/**
+ * Keep the previous Go data when this fetch could not read the Go list.
+ *
+ * The Go list is optional to the fetch (a network blip must not block the
+ * provider), but a merge without it has no `goRoute` and no Go-only models —
+ * and a Go subscriber with no credit then fails on every shared model until
+ * the next refresh. Carry the last known Go routes forward instead.
+ */
+export function carryForwardGoRoutes(
+  fresh: Record<string, OpencodeModelMeta>,
+  previous: Record<string, OpencodeModelMeta> | undefined,
+): Record<string, OpencodeModelMeta> {
+  if (!previous) return fresh;
+  const out: Record<string, OpencodeModelMeta> = { ...fresh };
+  for (const [id, old] of Object.entries(previous)) {
+    if (!old?.goRoute) continue;
+    if (out[id]) {
+      if (!out[id].goRoute) out[id] = { ...out[id], goRoute: old.goRoute, go: true };
+    } else if (old.goOnly) {
+      out[id] = old;
+    }
+  }
+  return out;
+}
+
+/**
+ * The ids to offer in pickers. A Go-only model is hidden once the key is known
+ * to lack Go: it can only fail for that key.
+ */
+export function opencodeOfferedIds(
+  meta: Record<string, OpencodeModelMeta>,
+  goAccess: OpencodeGoAccess = 'unknown',
+): string[] {
+  return Object.entries(meta)
+    .filter(([, m]) => !(goAccess === 'no' && m.goOnly))
+    .map(([id]) => id);
 }
 
 /**
@@ -274,6 +399,8 @@ export interface OpencodePreset {
   desc: string;
   api: OpencodeApiFamily;
   vision: boolean;
+  /** Also on OpenCode Go (2026-11-25 Go catalogue), served there on Chat Completions. */
+  go?: boolean;
 }
 
 /**
@@ -284,12 +411,12 @@ export interface OpencodePreset {
  * Settings: this list is deliberately six rows, not 89.
  */
 export const OPENCODE_PRESET_MODELS: readonly OpencodePreset[] = [
-  { id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', desc: 'Fast • Multimodal', api: 'chat-completions', vision: true },
-  { id: 'kimi-k3', name: 'Kimi K3', desc: 'Long context • Multimodal', api: 'chat-completions', vision: true },
+  { id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', desc: 'Fast • Multimodal', api: 'chat-completions', vision: true, go: true },
+  { id: 'kimi-k3', name: 'Kimi K3', desc: 'Long context • Multimodal', api: 'chat-completions', vision: true, go: true },
   { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', desc: 'Balanced • Multimodal', api: 'messages', vision: true },
   { id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol', desc: 'Reasoning • Multimodal', api: 'responses', vision: true },
   { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', desc: 'Fastest • Multimodal', api: 'generate-content', vision: true },
-  { id: 'glm-5.3', name: 'GLM 5.3', desc: 'Coding • Text', api: 'chat-completions', vision: false },
+  { id: 'glm-5.3', name: 'GLM 5.3', desc: 'Coding • Text', api: 'chat-completions', vision: false, go: true },
 ];
 
 /** Preset metadata, so a cold start dispatches without a fetch. */
@@ -301,6 +428,9 @@ export function opencodePresetMeta(): Record<string, OpencodeModelMeta> {
       baseUrl: opencodeFamilyBaseUrl(p.api),
       vision: p.vision,
       name: p.name,
+      // So a Go subscriber with no credit can use a preset before the first
+      // catalogue fetch lands; the catalogue replaces this wholesale.
+      ...(p.go ? { go: true, goRoute: { api: 'chat-completions' as const, baseUrl: OPENCODE_GO_OPENAI_BASE } } : {}),
     };
   }
   return out;

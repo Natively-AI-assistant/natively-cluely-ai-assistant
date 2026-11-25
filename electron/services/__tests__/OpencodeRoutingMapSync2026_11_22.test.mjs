@@ -123,9 +123,15 @@ describe('every catalogue reader applies through ONE writer', () => {
 
   test('applyOpencodeCatalogue writes credentials AND the live helper', () => {
     const apply = body(ipc, 'const applyOpencodeCatalogue = ');
-    assert.match(apply, /cm\.setOpencodeModelMeta\(catalogue\.meta\)/);
+    // `meta` is the catalogue's, with the last Go routes carried forward when
+    // this fetch could not read the Go list.
+    assert.match(apply, /const meta = catalogue\.goListRead \? catalogue\.meta : carryForwardGoRoutes\(catalogue\.meta, cm\.getOpencodeModelMeta\(\)\)/);
+    assert.match(apply, /cm\.setOpencodeModelMeta\(meta\)/);
     assert.match(apply, /cm\.setOpencodeVisionModels\(catalogue\.vision\)/);
-    assert.match(apply, /getLLMHelper\(\)\.setOpencodeModelMeta\(catalogue\.meta\)/);
+    assert.match(apply, /llmHelper\.setOpencodeModelMeta\(meta\)/);
+    // And the key's Go access, tagged with the key it was read for.
+    assert.match(apply, /cm\.setOpencodeGoAccess\(catalogue\.goAccess, key\)/);
+    assert.match(apply, /llmHelper\.setOpencodeGoAccess\(catalogue\.goAccess, key\)/);
   });
 
   test('it is the only place the routing metadata is persisted', () => {
@@ -135,9 +141,9 @@ describe('every catalogue reader applies through ONE writer', () => {
   });
 
   test('discovery and the card\'s fetch both apply through it', () => {
-    assert.match(body(ipc, 'const discoverOpencodeModels = '), /applyOpencodeCatalogue\(catalogue\)/);
+    assert.match(body(ipc, 'const discoverOpencodeModels = '), /applyOpencodeCatalogue\(catalogue, key\)/);
     const fetchHandler = ipc.slice(ipc.indexOf("'fetch-provider-models'"), ipc.indexOf("'set-provider-preferred-model'"));
-    assert.match(fetchHandler, /applyOpencodeCatalogue\(catalogue\)/);
+    assert.match(fetchHandler, /applyOpencodeCatalogue\(catalogue, key\.trim\(\)\)/);
   });
 
   test('the background refresh is applied after the service commits', () => {

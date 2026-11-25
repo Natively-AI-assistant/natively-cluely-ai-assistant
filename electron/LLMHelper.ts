@@ -40,13 +40,20 @@ import {
 } from './llm/opencode/constants'
 import {
   opencodeFastReasoningEffort,
+  opencodeMetaForRoute,
   opencodePresetMeta,
+  opencodeRoutes,
   resolveOpencodeFamily,
+  type OpencodeRouteChoice,
 } from './llm/opencode/catalog'
-import type { OpencodeApiFamily, OpencodeModelMeta } from './llm/opencode/types'
+import { probeOpencodeGoAccess } from './llm/opencode/probe'
+import type { OpencodeApiFamily, OpencodeGoAccess, OpencodeModelMeta } from './llm/opencode/types'
 import {
   OPENCODE_EMPTY_ANSWER,
   opencodeError,
+  opencodeGoOnlyError,
+  opencodeGoRefused,
+  opencodePaygWantsGo,
   opencodeRejectsOutputCap,
   opencodeRejectsReasoning,
 } from './llm/opencode/errors'
@@ -750,6 +757,17 @@ export class LLMHelper {
   // Cold-start metadata: the presets, so a selected preset dispatches even
   // before the first catalogue fetch lands. Replaced wholesale by setOpencodeConfig.
   private opencodeModelMeta: Record<string, OpencodeModelMeta> = opencodePresetMeta()
+  /**
+   * Whether the saved key has OpenCode Go, as Go's usage endpoint answered it
+   * (probeOpencodeGoAccess) — never inferred from a chat error. Set by the
+   * catalogue fetch (ipcHandlers) and by a re-read when a route refusal says
+   * it may be stale; persisted through the listener; reset with the key. Read
+   * through opencodeGoAccessNow(): a bare-prototype harness never runs this.
+   */
+  private opencodeGoAccess: OpencodeGoAccess = 'unknown'
+  private opencodeGoAccessListener: ((access: OpencodeGoAccess, apiKey: string) => void) | null = null
+  /** Last usage-endpoint read, so a burst of refused turns asks once, not per turn. */
+  private opencodeGoProbe: { key: string; at: number; result: Promise<OpencodeGoAccess>; unknown?: boolean } | null = null
   /**
    * Stable per-process session id for OpenCode's Go tier.
    *
@@ -2190,8 +2208,10 @@ export class LLMHelper {
    *
    * `meta` replaces the whole routing map (see setOpencodeModelMeta).
    */
-  public setOpencodeConfig(apiKey: string, meta?: Record<string, OpencodeModelMeta>) {
+  public setOpencodeConfig(apiKey: string, meta?: Record<string, OpencodeModelMeta>, goAccess?: OpencodeGoAccess) {
     const trimmed = (apiKey || '').trim();
+    // What the caller persisted for THIS key; a new key starts unknown.
+    this.opencodeGoAccess = trimmed && (goAccess === 'yes' || goAccess === 'no') ? goAccess : 'unknown';
     // Fresh key → retry immediately; skip any auth cooldown opened for the old one.
     this.textHealth.delete('opencode');
     this.visionHealth.delete('opencode');
@@ -2274,6 +2294,70 @@ export class LLMHelper {
 
   public getOpencodeModelMeta(): Record<string, OpencodeModelMeta> {
     return this.opencodeModelMeta;
+  }
+
+  /** Persists a fresh usage-endpoint answer (CredentialsManager), tagged with the key it is about. */
+  public setOpencodeGoAccessListener(listener: ((access: OpencodeGoAccess, apiKey: string) => void) | null): void {
+    this.opencodeGoAccessListener = listener;
+  }
+
+  public getOpencodeGoAccess(): OpencodeGoAccess {
+    return this.opencodeGoAccessNow();
+  }
+
+  /**
+   * Adopt a usage-endpoint answer read with `apiKey`. Ignored when it is about
+   * another key (a fetch that outlived a key change) or when it is `unknown`
+   * (an unreadable endpoint is not news: keep what we knew).
+   */
+  public setOpencodeGoAccess(access: OpencodeGoAccess, apiKey: string): void {
+    if (access !== 'yes' && access !== 'no') return;
+    if (!apiKey || apiKey.trim() !== this.opencodeApiKey) return;
+    this.opencodeGoAccess = access;
+  }
+
+  private opencodeGoAccessNow(): OpencodeGoAccess {
+    const v = this.opencodeGoAccess;
+    return v === 'yes' || v === 'no' ? v : 'unknown';
+  }
+
+  /** The usage-endpoint read itself. A method so tests can replace it. */
+  private opencodeProbeGo(apiKey: string): Promise<OpencodeGoAccess> {
+    return probeOpencodeGoAccess(apiKey, { timeoutMs: 5000 });
+  }
+
+  /**
+   * Re-read the key's Go access because a route refusal suggests the stored
+   * answer is stale (a lapsed subscription, a new one, a first turn before any
+   * catalogue). At most one read per key per 30 s, shared by concurrent turns.
+   * A definite answer for the key still in use is adopted and persisted.
+   */
+  private async refreshOpencodeGoAccess(keyAtStart: string | null): Promise<OpencodeGoAccess> {
+    if (!keyAtStart) return this.opencodeGoAccessNow();
+    const now = Date.now();
+    const cached = this.opencodeGoProbe;
+    // Concurrent turns share one read. A definite answer is adopted below, so
+    // only a refusal brings us back here; an unreadable endpoint is not asked
+    // again for 5 minutes, so it cannot add its timeout to every turn.
+    const fresh0 = cached && cached.key === keyAtStart && now - cached.at < (cached.unknown ? 300_000 : 30_000);
+    const probe = fresh0
+      ? cached!.result
+      : this.opencodeProbeGo(keyAtStart).catch(() => 'unknown' as OpencodeGoAccess);
+    if (!fresh0) {
+      const entry: { key: string; at: number; result: Promise<OpencodeGoAccess>; unknown?: boolean } = { key: keyAtStart, at: now, result: probe };
+      this.opencodeGoProbe = entry;
+      void probe.then((r) => { if (r === 'unknown') entry.unknown = true; });
+    }
+    const fresh = await probe;
+    if (fresh === 'unknown' || keyAtStart !== this.opencodeApiKey) return fresh;
+    if (fresh !== this.opencodeGoAccessNow()) {
+      this.opencodeGoAccess = fresh;
+      console.log(`[OpenCode] Go access re-read for this key: ${fresh}`);
+      try { this.opencodeGoAccessListener?.(fresh, keyAtStart); } catch (e: any) {
+        console.warn('[OpenCode] could not persist Go access:', e?.message);
+      }
+    }
+    return fresh;
   }
 
   /**
@@ -2552,7 +2636,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl' | 'ollama' | 'oauth_model',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'opencode' | 'deepseek' | 'curl' | 'ollama' | 'oauth_model',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2597,6 +2681,25 @@ export class LLMHelper {
         return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'agentrouter':
         return this.generateWithAgentRouter(userPrompt, systemPrompt, [imagePath], undefined, opts?.signal);
+      case 'opencode': {
+        // VisionProviderRegistry seats this rung (only for a selected,
+        // image-reading OpenCode model) and hands off here; without this case
+        // every screen read through OpenCode threw "unknown providerId".
+        // streamWithOpencode returns quietly on abort, so a cancelled read must
+        // throw here, or an empty string is stored as the screen's contents.
+        // The rung is seated when the vision answer is merely UNKNOWN, while the
+        // adapter strips images from a model the catalogue marks text-only.
+        // Returning that model's blind answer as the screen's contents would be
+        // worse than failing over: refuse, so the chain tries the next rung.
+        const meta = this.opencodeMetaFor(this.currentModelId);
+        if (meta?.vision === false) {
+          throw new Error(`${this.opencodeWireModel(this.currentModelId)} cannot read images on OpenCode`);
+        }
+        let text = '';
+        for await (const piece of this.streamWithOpencode(userPrompt, systemPrompt, [imagePath], opts?.signal)) text += piece;
+        if (opts?.signal?.aborted) throw new Error('The OpenCode screen read was cancelled');
+        return text;
+      }
       // The two selected-only rungs (2026-10-01) reuse the streaming adapters
       // and collect the answer: no second request shape to keep in step, and
       // both adapters keep their own privacy gates (assertOutboundScopes).
@@ -2902,7 +3005,11 @@ export class LLMHelper {
    * A caller's explicit override always wins.
    */
   private opencodeDefaultSystemPrompt(modelId: string): string {
-    const family = resolveOpencodeFamily(modelId, this.opencodeMetaFor(modelId));
+    // The protocol of the route tried FIRST: on Go, minimax-m3 and qwen3.8-max
+    // are Messages models while their pay-as-you-go entries are Chat
+    // Completions, so the paid entry would pick the wrong prompt family.
+    const family = opencodeRoutes(this.opencodeWireModel(modelId), this.opencodeMetaFor(modelId), this.opencodeGoAccessNow())[0]?.api
+      ?? resolveOpencodeFamily(modelId, this.opencodeMetaFor(modelId));
     if (family === 'messages') return CLAUDE_SYSTEM_PROMPT;
     if (family === 'generate-content') return HARD_SYSTEM_PROMPT;
     return OPENAI_SYSTEM_PROMPT;
@@ -8344,7 +8451,6 @@ let isMultimodal = !!(imagePaths?.length);
     const routed = modelId || this.currentModelId;
     const model = this.opencodeWireModel(routed);
     const meta = this.opencodeMetaFor(model);
-    const family: OpencodeApiFamily = resolveOpencodeFamily(model, meta);
 
     // Adapter-level backstop. The vision chain and Direct Assist already gate
     // on the catalogue; if either ever forgets, a model the catalogue marks
@@ -8354,19 +8460,93 @@ let isMultimodal = !!(imagePaths?.length);
       ? undefined
       : imagePaths;
 
+    // Pay-as-you-go and Go are separate routes for the same id. Which one this
+    // key may use is the usage endpoint's answer (opencodeGoAccess), not a
+    // guess from a chat error. A refusal that suggests that answer went stale
+    // triggers ONE re-read, and only that answer decides whether to try the
+    // other route. Never after anything was shown: a half-streamed answer is
+    // never restarted elsewhere.
+    const keyAtStart = this.opencodeApiKey;
+    // Unknown Go access with a choice of routes (first turn before any
+    // catalogue fetch, or the endpoint was unreadable then): ask before
+    // sending, so the order never rests on how Go happens to refuse a key it
+    // does not cover. One GET, shared and cached by refreshOpencodeGoAccess.
+    let reread = false;
+    if (this.opencodeGoAccessNow() === 'unknown' && (meta?.goRoute || meta?.goOnly || /\/inference\/go\//.test(meta?.baseUrl || ''))) {
+      reread = true;
+      await this.refreshOpencodeGoAccess(keyAtStart);
+      if (abortSignal?.aborted) return;
+    }
+    const candidates = opencodeRoutes(model, meta, this.opencodeGoAccessNow());
+    let route: OpencodeRouteChoice | undefined = candidates[0];
+    const tried = new Set<'payg' | 'go'>();
+    let paygError: any = null;
+    while (route) {
+      tried.add(route.kind);
+      if (tried.size > 1) await this.rateLimiters.opencode.acquire();
+      const routeMeta = meta ? opencodeMetaForRoute(meta, route) : undefined;
+      const family: OpencodeApiFamily = meta ? route.api : resolveOpencodeFamily(model);
+      let yielded = false;
+      try {
+        for await (const chunk of this.openOpencodeAdapter(family, model, userMessage, systemPrompt, usableImages, abortSignal, routeMeta)) {
+          yielded = true;
+          yield chunk;
+        }
+        return;
+      } catch (e: any) {
+        if (yielded || abortSignal?.aborted) throw e;
+        if (route.kind === 'payg') paygError = e;
+        const otherKind: 'payg' | 'go' = route.kind === 'go' ? 'payg' : 'go';
+        const other: OpencodeRouteChoice | undefined = tried.has(otherKind) ? undefined : candidates.find((c) => c.kind === otherKind);
+        const suspicious = route.kind === 'go' ? opencodeGoRefused(e, model) : opencodePaygWantsGo(e, model);
+        if (!suspicious) throw e;
+
+        let access = this.opencodeGoAccessNow();
+        if (!reread) {
+          reread = true;
+          const fresh = await this.refreshOpencodeGoAccess(keyAtStart);
+          if (fresh !== 'unknown') access = fresh;
+          if (abortSignal?.aborted) return;
+        }
+
+        if (route.kind === 'go') {
+          // A key with Go is never moved onto pay-as-you-go credits by us: the
+          // refusal is about this model or a limit, and OpenCode's Extra Usage
+          // setting is what decides overflow billing.
+          if (access === 'yes') throw e;
+          if (other) {
+            console.warn(`[OpenCode] ${model}: Go refused this key (Go access: ${access}); using pay-as-you-go`);
+            route = other;
+            continue;
+          }
+          if (meta?.goOnly && access === 'no' && !paygError) throw opencodeGoOnlyError(e, model);
+          // Both routes refused: the pay-as-you-go reason (usually balance) is
+          // the one the user can act on.
+          throw paygError ?? e;
+        }
+
+        // Pay-as-you-go asked for Go. Only worth it when the key may have Go.
+        if (access === 'no' || !other) throw e;
+        console.warn(`[OpenCode] ${model}: pay-as-you-go refused a Go key (Go access: ${access}); using the Go route`);
+        route = other;
+      }
+    }
+  }
+
+  private openOpencodeAdapter(
+    family: OpencodeApiFamily,
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    meta: OpencodeModelMeta | undefined,
+  ): AsyncGenerator<string, void, unknown> {
     switch (family) {
-      case 'messages':
-        yield* this.streamOpencodeMessages(model, userMessage, systemPrompt, usableImages, abortSignal, meta);
-        return;
-      case 'responses':
-        yield* this.streamOpencodeResponses(model, userMessage, systemPrompt, usableImages, abortSignal, meta);
-        return;
-      case 'generate-content':
-        yield* this.streamOpencodeGenerateContent(model, userMessage, systemPrompt, usableImages, abortSignal, meta);
-        return;
-      default:
-        yield* this.streamOpencodeChatCompletions(model, userMessage, systemPrompt, usableImages, abortSignal, meta);
-        return;
+      case 'messages': return this.streamOpencodeMessages(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+      case 'responses': return this.streamOpencodeResponses(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+      case 'generate-content': return this.streamOpencodeGenerateContent(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+      default: return this.streamOpencodeChatCompletions(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
     }
   }
 

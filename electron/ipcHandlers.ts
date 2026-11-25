@@ -12801,12 +12801,36 @@ export function initializeIpcHandlers(appState: AppState): void {
   // helper, so the next turn does. Every path that reads the catalogue ends
   // here — key save, the card's Refresh, the cold-start fetch and the
   // background refresh. `modelFetcher` stays free of Electron.
-  const applyOpencodeCatalogue = (catalogue: import('./utils/modelFetcher').OpencodeCatalogueResult): void => {
+  // Every list the fetcher returns (including the background live-catalogue
+  // refresh) hides Go-only models once the saved key is known to lack Go.
+  try {
+    const { setOpencodeGoAccessReader } = require('./utils/modelFetcher') as typeof import('./utils/modelFetcher');
+    setOpencodeGoAccessReader(() => {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getOpencodeGoAccess();
+    });
+  } catch (e: any) {
+    console.warn('[IPC] Could not install the OpenCode Go access reader:', e?.message);
+  }
+
+  const applyOpencodeCatalogue = (catalogue: import('./utils/modelFetcher').OpencodeCatalogueResult, key: string): void => {
     const { CredentialsManager } = require('./services/CredentialsManager');
+    const { carryForwardGoRoutes } = require('./llm/opencode/catalog') as typeof import('./llm/opencode/catalog');
     const cm = CredentialsManager.getInstance();
-    cm.setOpencodeModelMeta(catalogue.meta);
+    // A fetch that could not read the Go list must not erase the Go routes a
+    // Go subscriber with no credit depends on: keep the last known ones.
+    const meta = catalogue.goListRead ? catalogue.meta : carryForwardGoRoutes(catalogue.meta, cm.getOpencodeModelMeta());
+    cm.setOpencodeModelMeta(meta);
     cm.setOpencodeVisionModels(catalogue.vision);
-    appState.processingHelper.getLLMHelper().setOpencodeModelMeta(catalogue.meta);
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    llmHelper.setOpencodeModelMeta(meta);
+    // The usage endpoint's answer for THIS key (never another's: both writes
+    // check the key). This is also what un-sticks a stored answer after the
+    // user subscribes to Go or lets it lapse.
+    if (catalogue.goAccess !== 'unknown') {
+      cm.setOpencodeGoAccess(catalogue.goAccess, key);
+      llmHelper.setOpencodeGoAccess(catalogue.goAccess, key);
+    }
   };
 
   const discoverOpencodeModels = async () => {
@@ -12819,7 +12843,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // The key can change while the fetch is in flight. A catalogue read with
     // the OLD key names another workspace's models and bases: drop it.
     if ((cm.getOpencodeApiKey() || '').trim() !== key) return null;
-    applyOpencodeCatalogue(catalogue);
+    applyOpencodeCatalogue(catalogue, key);
     return catalogue;
   };
 
@@ -12827,7 +12851,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   const storedOpencodeModelIds = (): string[] => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const cm = CredentialsManager.getInstance();
-    const ids = Object.keys(cm.getOpencodeModelMeta() || {});
+    const { opencodeOfferedIds } = require('./llm/opencode/catalog') as typeof import('./llm/opencode/catalog');
+    const ids = opencodeOfferedIds(cm.getOpencodeModelMeta() || {}, cm.getOpencodeGoAccess());
     const preferred = cm.getPreferredModel?.('opencode');
     if (preferred?.startsWith('opencode/')) {
       const bare = preferred.slice('opencode/'.length);
@@ -12876,7 +12901,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setOpencodeConfig(normalizedKey, cm.getOpencodeModelMeta());
+      llmHelper.setOpencodeConfig(normalizedKey, cm.getOpencodeModelMeta(), cm.getOpencodeGoAccess());
       appState.getIntelligenceManager().resetEngine();
       appState.getIntelligenceManager().initializeLLMs();
       if (keyChanged) {
@@ -14855,7 +14880,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Routing metadata only for the SAVED key: the card can fetch with a
           // typed-but-unsaved key, and that workspace's bases must not become
           // the routing map for the key the app actually sends.
-          if (key.trim() === (cm.getOpencodeApiKey() || '').trim()) applyOpencodeCatalogue(catalogue);
+          if (key.trim() === (cm.getOpencodeApiKey() || '').trim()) applyOpencodeCatalogue(catalogue, key.trim());
           cm.setCloudFetchedModels(
             provider,
             catalogue.models.map((m) => ({ id: m.id, label: m.label || m.id })),

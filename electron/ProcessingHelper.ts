@@ -136,10 +136,16 @@ export class ProcessingHelper {
     // dispatches to nothing until they re-save the card. The metadata travels
     // WITH the key: without it the adapter cannot tell which of the four
     // protocols serves the selected model.
+    // Go access is read from Go's usage endpoint (with each catalogue fetch,
+    // and again when a route refusal says it went stale) and persisted here,
+    // tagged with the key it is about, so a restart routes right first time.
+    this.llmHelper.setOpencodeGoAccessListener((access, apiKey) => {
+      credManager.setOpencodeGoAccess(access, apiKey);
+    });
     const opencodeKey = credManager.getOpencodeApiKey();
     if (opencodeKey) {
       console.log("[ProcessingHelper] Loading stored OpenCode config from CredentialsManager");
-      this.llmHelper.setOpencodeConfig(opencodeKey, credManager.getOpencodeModelMeta());
+      this.llmHelper.setOpencodeConfig(opencodeKey, credManager.getOpencodeModelMeta(), credManager.getOpencodeGoAccess());
     }
 
     const nativelyKey = credManager.getNativelyApiKey();

@@ -21,11 +21,48 @@ export const OPENCODE_API_FAMILIES: readonly OpencodeApiFamily[] = [
   'generate-content',
 ];
 
-export interface OpencodeModelMeta {
-  /** Which wire protocol serves this id. */
+/** One way to reach a model: the protocol and the base it is served on. */
+export interface OpencodeRoute {
   api: OpencodeApiFamily;
-  /** From `api.<family>.base_url`; the family base when the catalogue omits it. */
   baseUrl: string;
+  /**
+   * The route's own reasoning capability, when it differs from the model's
+   * pay-as-you-go entry (kimi-k3 lists low/high/max paid but only max on Go,
+   * so sending the paid route's `low` to Go is a parameter Go never offered).
+   */
+  reasoning?: boolean;
+  reasoningEffort?: string[];
+}
+
+/**
+ * Whether the saved key has an OpenCode Go subscription.
+ *
+ * Neither catalogue can tell: `/go/v1/models` answers 200 to anyone, key or
+ * not (checked live 2026-11-25). It is read from Go's usage endpoint
+ * (probeOpencodeGoAccess) with every catalogue fetch, and re-read when a
+ * route refusal suggests the stored answer went stale. `unknown` = that
+ * endpoint could not be read.
+ */
+export type OpencodeGoAccess = 'unknown' | 'yes' | 'no';
+
+export interface OpencodeModelMeta {
+  /** Which wire protocol serves this id on `baseUrl`. */
+  api: OpencodeApiFamily;
+  /**
+   * The pay-as-you-go base when the paid catalogue lists the model, else its
+   * Go base (`goOnly`). From `api.<family>.base_url`; the family base when the
+   * catalogue omits it.
+   */
+  baseUrl: string;
+  /**
+   * The Go route, when the Go catalogue lists the model. Kept separate rather
+   * than overwriting `api`/`baseUrl`, because the Go list is public: holding it
+   * says nothing about whether THIS key may use it. It can also name a
+   * different protocol (minimax-m3 is Messages on Go, Chat Completions paid).
+   */
+  goRoute?: OpencodeRoute;
+  /** True when only the Go catalogue lists the model (no pay-as-you-go route). */
+  goOnly?: boolean;
   /** True when `modalities.input` contains any image/* entry. */
   vision: boolean;
   /** `limit.context`, absent when the catalogue omitted it. */

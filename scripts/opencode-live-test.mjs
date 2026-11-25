@@ -40,6 +40,7 @@ require.cache[electronPath] = {
 
 const { LLMHelper } = require(path.join(root, 'dist-electron/electron/LLMHelper.js'));
 const { fetchOpencodeCatalogue } = require(path.join(root, 'dist-electron/electron/utils/modelFetcher.js'));
+const { opencodeRoutes } = require(path.join(root, 'dist-electron/electron/llm/opencode/catalog.js'));
 const { probeOpencode } = require(path.join(root, 'dist-electron/electron/llm/opencode/probe.js'));
 
 const OpenAI = require('openai');
@@ -64,10 +65,14 @@ const PREFERENCE = {
   'generate-content': ['gemini-4-argon', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash'],
 };
 
-const isGo = (meta, id) => String(meta[id]?.baseUrl || '').includes('/go/');
+// The route this key will use FIRST, as LLMHelper picks it: Go and
+// pay-as-you-go are separate routes, and can differ in protocol.
+let GO_ACCESS = 'unknown';
+const firstRoute = (meta, id) => (meta[id] ? opencodeRoutes(id, meta[id], GO_ACCESS)[0] : null);
+const isGo = (meta, id) => firstRoute(meta, id)?.kind === 'go';
 
 const pick = (meta, family) => {
-  const available = (id) => meta[id]?.api === family;
+  const available = (id) => firstRoute(meta, id)?.api === family;
   // Prefer a model this key can actually call: Go first when Go serves it.
   const go = PREFERENCE[family].find((id) => available(id) && isGo(meta, id));
   if (go) return go;
@@ -94,7 +99,7 @@ function buildHelper(meta) {
     { ...m, outputTokens: Math.min(m.outputTokens || 128, 128) },
   ]));
   // EXERCISE THE PRODUCTION SETTER: clients, Go session header, base cache.
-  h.setOpencodeConfig(KEY, clamped);
+  h.setOpencodeConfig(KEY, clamped, GO_ACCESS);
   h.__usage = [];
   h.recordOpencodeUsage = (usage) => {
     if (usage) h.__usage.push({ cost: usage.cost, billing: usage.opencode?.billing_source });
@@ -140,9 +145,11 @@ async function makeVisionFixture() {
   // ── 2. catalogue ────────────────────────────────────────────────────────
   console.log('\n2. Catalogue (workspace-scoped)');
   const catalogue = await fetchOpencodeCatalogue(KEY);
+  GO_ACCESS = catalogue.goAccess;
   const meta = catalogue.meta;
   const ids = Object.keys(meta);
-  const byFamily = ids.reduce((a, id) => { a[meta[id].api] = (a[meta[id].api] || 0) + 1; return a; }, {});
+  console.log(`   Go access for this key (usage endpoint): ${GO_ACCESS}`);
+  const byFamily = ids.reduce((a, id) => { const f = firstRoute(meta, id).api; a[f] = (a[f] || 0) + 1; return a; }, {});
   const visionIds = ids.filter((id) => meta[id].vision);
   console.log(`   ${ids.length} usable models; families ${JSON.stringify(byFamily)}`);
   console.log(`   vision-capable ${visionIds.length}; free ids withheld ${catalogue.freeSkipped}`);
@@ -155,9 +162,9 @@ async function makeVisionFixture() {
 
   // ── 3. streaming chat, one model per protocol ───────────────────────────
   console.log('\n3. Streaming chat through each protocol adapter');
-  const deepseekBase = meta['deepseek-v4.1-flash']?.baseUrl || '';
-  console.log(`   deepseek-v4.1-flash base: ${deepseekBase}`);
-  console.log(`   go-routed models: ${ids.filter((id) => meta[id].baseUrl.includes('/go/')).length}/${ids.length}`);
+  const deepseekBase = firstRoute(meta, 'deepseek-v4.1-flash')?.baseUrl || '';
+  console.log(`   deepseek-v4.1-flash first route: ${deepseekBase}`);
+  console.log(`   Go first for ${ids.filter((id) => isGo(meta, id)).length}/${ids.length} models (Go-only: ${ids.filter((id) => meta[id].goOnly).length})`);
   const cases = [
     ['chat-completions', 'deepseek-v4.1-flash'], // the model requested for this test
     ['responses', null],
@@ -165,14 +172,14 @@ async function makeVisionFixture() {
     ['generate-content', null],
   ];
   for (const [family, forced] of cases) {
-    const model = forced && meta[forced]?.api === family ? forced : pick(meta, family);
+    const model = forced && firstRoute(meta, forced)?.api === family ? forced : pick(meta, family);
     if (!model) { ok(`${family} has an available model`, false); continue; }
     const routed = `opencode/${model}`;
     try {
       const r = await drain(helper.streamWithOpencode(
         'Reply with exactly the word: PONG', undefined, undefined, undefined, routed,
       ));
-      console.log(`   ${family.padEnd(17)} ${model.padEnd(24)} base=${meta[model].baseUrl.replace('https://opencode.ai', '')} ttft=${r.ttftMs ?? '-'}ms total=${r.totalMs}ms text=${JSON.stringify(r.text.slice(0, 60))}`);
+      console.log(`   ${family.padEnd(17)} ${model.padEnd(24)} base=${firstRoute(meta, model).baseUrl.replace('https://opencode.ai', '')} ttft=${r.ttftMs ?? '-'}ms total=${r.totalMs}ms text=${JSON.stringify(r.text.slice(0, 60))}`);
       ok(`${family} answered with text`, r.text.trim().length > 0, JSON.stringify(r.text));
       ok(`${family} produced a first token`, r.ttftMs !== null);
     } catch (e) {
@@ -222,8 +229,8 @@ async function makeVisionFixture() {
     // Two families, so the image path is proven in more than one protocol.
     const visionCases = [visionModel, pick(meta, 'generate-content')].filter(Boolean);
     for (const model of [...new Set(visionCases)]) {
-      const base = (meta[model].baseUrl || '').replace('https://opencode.ai', '');
-      console.log(`   model: ${model} (${meta[model].api}, ${base})`);
+      const r0 = firstRoute(meta, model);
+      console.log(`   model: ${model} (${r0.api}, ${r0.baseUrl.replace('https://opencode.ai', '')})`);
       try {
         const r = await drain(helper.streamWithOpencode(
           'Read the large text in this image. Reply with exactly that text and nothing else.',

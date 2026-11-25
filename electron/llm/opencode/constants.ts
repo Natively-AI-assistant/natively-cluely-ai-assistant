@@ -35,6 +35,17 @@ export const OPENCODE_GOOGLE_BASE = `${OPENCODE_INFERENCE_BASE}/google`;
 export const OPENCODE_MODELS_URL = `${OPENCODE_INFERENCE_BASE}/v1/models`;
 export const OPENCODE_GO_MODELS_URL = `${OPENCODE_INFERENCE_BASE}/go/v1/models`;
 
+/** Go's own bases, for the presets' Go routes (the catalogue names them per model). */
+export const OPENCODE_GO_OPENAI_BASE = `${OPENCODE_INFERENCE_BASE}/go/openai/v1`;
+
+/**
+ * Go usage, read with the key. The ONE authoritative answer to "does this key
+ * have Go?": 200 = covered, 403 `EntitlementError` = "Keys Go doesn't cover"
+ * (documented), 401 `AuthError` = not a valid key (measured live 2026-11-25).
+ * The Go MODEL list cannot answer it: that endpoint is public.
+ */
+export const OPENCODE_GO_USAGE_URL = `${OPENCODE_INFERENCE_BASE}/go/v1/usage`;
+
 /** Deliberately unroutable id for Test Connection. */
 export const OPENCODE_PROBE_MODEL = '__natively_connection_probe__';
 

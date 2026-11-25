@@ -14,7 +14,7 @@ import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from 
 // used to live here is exactly how the two answers drifted apart.
 import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
 import { readActiveCustomProvider } from '../llm/activeCustomProvider';
-import type { OpencodeModelMeta } from '../llm/opencode/types';
+import type { OpencodeGoAccess, OpencodeModelMeta } from '../llm/opencode/types';
 import { normalizeSttLanguageKey } from '../config/languages';
 import { resolveSttModel, type SttModelProvider } from '../audio/sttModelCatalog';
 
@@ -233,6 +233,12 @@ export interface StoredCredentials {
      * as "this provider has no vision models".
      */
     opencodeVisionModels?: string[];
+    /**
+     * Whether the saved OpenCode key has a Go subscription, as a real request
+     * showed it ('yes' | 'no'); absent = not learned yet. Neither catalogue can
+     * answer this, because the Go list is public. Cleared with a changed key.
+     */
+    opencodeGoAccess?: 'yes' | 'no';
     /**
      * The OpenCode model the user promoted to this provider's default, stored
      * prefixed (`opencode/<model>`) for the reason the LiteLLM field gives: it
@@ -1537,6 +1543,7 @@ export class CredentialsManager {
         if (!trimmed || trimmed !== previous) {
             this.credentials.opencodeModelMeta = undefined;
             this.credentials.opencodeVisionModels = undefined;
+            this.credentials.opencodeGoAccess = undefined;
             // A default naming a model on the old workspace is worse than none.
             this.credentials.opencodePreferredModel = undefined;
         }
@@ -1556,6 +1563,25 @@ export class CredentialsManager {
     public setOpencodeModelMeta(meta: Record<string, OpencodeModelMeta>): boolean {
         if (this.refuseWriteWhileDegraded('set opencode model meta')) return false;
         this.credentials.opencodeModelMeta = meta;
+        return this.saveCredentials();
+    }
+
+    public getOpencodeGoAccess(): OpencodeGoAccess {
+        const v = this.credentials.opencodeGoAccess;
+        return v === 'yes' || v === 'no' ? v : 'unknown';
+    }
+
+    /**
+     * Store the usage endpoint's answer for `forKey`. Dropped when it is about
+     * another key: a read that outlived a key change must not hand the old
+     * key's Go status to the new one.
+     */
+    public setOpencodeGoAccess(access: OpencodeGoAccess, forKey: string): boolean {
+        if ((forKey || '').trim() !== (this.credentials.opencodeApiKey || '').trim()) return false;
+        if (this.refuseWriteWhileDegraded('set opencode go access')) return false;
+        const next = access === 'yes' || access === 'no' ? access : undefined;
+        if (this.credentials.opencodeGoAccess === next) return true;
+        this.credentials.opencodeGoAccess = next;
         return this.saveCredentials();
     }
 
