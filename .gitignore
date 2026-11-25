@@ -226,6 +226,9 @@ native-module/*.node
 # previous artifact aside before rebuilding (see the win32 branch there). The
 # leftover is deleted once nothing holds it — usually on the next build.
 native-module/*.node.stale-*
+# A module that fails a link check is kept beside as .rejected-<time> for
+# inspection (checkOrReject in build-native.js).
+native-module/*.node.rejected-*
 
 .github/RepoGuide.md
 

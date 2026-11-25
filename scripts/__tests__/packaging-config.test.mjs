@@ -299,3 +299,41 @@ test('the macOS native build pins its deployment target instead of taking Rust\'
     `MACOS_DEPLOYMENT_TARGET is ${pinned[1]}.${pinned[2]}; below 10.15 the Swift overlay libraries are linked by @rpath`
   );
 });
+
+test('moved-aside native modules in native-module/ never ship (macOS and Windows)', () => {
+  // build-native.js moves aside: a locked .node on Windows as <name>.node.stale-<time>
+  // (renamed ….stale-<time>.rescue-last-good when it cannot be restored), a module
+  // that fails a link check as <name>.node.rejected-<time> on both platforms, and
+  // the macOS string-table fixer's swap file is <name>.node.stale-align-<pid> if a
+  // run is killed (#791). `files` takes all of native-module/, so without these
+  // rules they were packed.
+  for (const rule of ['!**/native-module/*.node.stale-*', '!**/native-module/*.node.rejected-*']) {
+    assert.ok(pkg.build.files.includes(rule), `build.files is missing ${rule}`);
+  }
+  for (const target of ['mac', 'win']) {
+    assert.equal(pkg.build[target]?.files, undefined, `${target} would replace build.files and drop the rule`);
+  }
+  const signed = fs.readFileSync(path.join(repoRoot, 'electron-builder.signed.cjs'), 'utf8');
+  assert.match(signed, /\.\.\.base,/, 'the signed config inherits build.files');
+  assert.doesNotMatch(signed, /^\s*files\s*:/m, 'the signed config does not replace build.files');
+
+  let FileMatcher;
+  try {
+    ({ FileMatcher } = createRequire(import.meta.url)('app-builder-lib/out/fileMatcher.js'));
+  } catch {
+    return; // electron-builder's internals moved; the rule check above still holds
+  }
+  // Real platform paths: on Windows the matcher strips `<src>\` from each file.
+  const appDir = path.resolve(repoRoot, 'release-filter-check');
+  const ships = new FileMatcher(appDir, appDir, (s) => s, pkg.build.files).createFilter();
+  const file = { isDirectory: () => false };
+  const shipped = (name) => ships(path.join(appDir, 'native-module', name), file);
+  assert.equal(shipped('index.darwin-arm64.node'), true);
+  assert.equal(shipped('index.win32-x64-msvc.node'), true);
+  assert.equal(shipped('index.js'), true);
+  assert.equal(shipped('index.darwin-arm64.node.stale-align-4242'), false);
+  assert.equal(shipped('index.win32-x64-msvc.node.stale-1795535765'), false);
+  assert.equal(shipped('index.win32-x64-msvc.node.stale-1795535765.rescue-last-good'), false);
+  assert.equal(shipped('index.darwin-x64.node.rejected-1795535765'), false);
+  assert.equal(shipped('index.win32-x64-msvc.node.rejected-1795535765'), false);
+});

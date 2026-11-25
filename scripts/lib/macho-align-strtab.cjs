@@ -13,12 +13,14 @@
  *
  * The string table is the last thing in __LINKEDIT once the signature is
  * removed, so moving it later in the file by the missing bytes changes nothing
- * else: symbols address strings relative to stroff. The caller re-signs.
+ * else: symbols address strings relative to stroff. The file step re-signs.
  *
  * macOS only. The Windows and Linux builds never call this.
  */
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { execFileSync } = require('child_process');
 
 const MH_MAGIC_64 = 0xfeedfacf;
@@ -77,14 +79,70 @@ function alignStringTable(buf, align = 8) {
   return { buf: out, pad };
 }
 
-/** Aligns a built .node in place and ad-hoc re-signs it. Returns the bytes added (0 when it was fine). */
-function alignMachOStringTableFile(file, run = execFileSync) {
+/**
+ * Aligns a built .node and ad-hoc re-signs it. Returns the bytes added (0 when
+ * it was fine).
+ *
+ * The signature comes off a copy, never the module: the copy is aligned and
+ * signed, then written over the module. If any step fails, the module keeps its
+ * original bytes and signature and is still misaligned, so the next run tries
+ * again. Changing the module itself first used to leave it unsigned on failure,
+ * and aligned but unsigned when the re-sign failed, which the next run then
+ * skipped as done (#791). A kill (power loss, kill -9) can leave the temp
+ * staging folder behind; the OS clears it.
+ */
+function alignMachOStringTableFile(modulePath, run = execFileSync) {
+  // Through a symlink, align the module it points to, as writing in place did.
+  const file = fs.realpathSync(modulePath);
+  removeLeftoverSwaps(file);
   if (!alignStringTable.isMisaligned(fs.readFileSync(file))) return 0;
-  run('codesign', ['--remove-signature', file]);
-  const result = alignStringTable(fs.readFileSync(file));
-  if (result) fs.writeFileSync(file, result.buf);
-  run('codesign', ['--force', '--sign', '-', file]);
-  return result ? result.pad : 0;
+  const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-'));
+  // Same file name: the ad-hoc signature's identifier is taken from it.
+  const staged = path.join(stagingDir, path.basename(file));
+  // Next to the module, so the rename below stays on one volume and swaps the
+  // file in one step: a failed copy (a full disk) only ever leaves this one
+  // half-written. '.stale-' matches the native-module/*.node.stale-* ignore rule.
+  const swap = `${file}.stale-align-${process.pid}`;
+  try {
+    fs.copyFileSync(file, staged);
+    run('codesign', ['--remove-signature', staged]);
+    const result = alignStringTable(fs.readFileSync(staged));
+    if (!result) return 0;
+    fs.writeFileSync(staged, result.buf);
+    run('codesign', ['--force', '--sign', '-', staged]);
+    fs.copyFileSync(staged, swap);
+    fs.renameSync(swap, file);
+    return result.pad;
+  } finally {
+    fs.rmSync(swap, { force: true });
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Deletes swap files a killed run left beside the module (power loss or kill -9
+ * between the copy and the rename). A swap whose process is still running
+ * belongs to another build and is left alone. Packaging also leaves them out
+ * (the native-module .node.stale-* rule in package.json build.files).
+ */
+function removeLeftoverSwaps(file) {
+  const prefix = `${path.basename(file)}.stale-align-`;
+  for (const name of fs.readdirSync(path.dirname(file))) {
+    if (!name.startsWith(prefix)) continue;
+    const pid = Number(name.slice(prefix.length));
+    if (pid !== process.pid && isRunning(pid)) continue;
+    fs.rmSync(path.join(path.dirname(file), name), { force: true });
+  }
+}
+
+function isRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // running, but owned by another user
+  }
 }
 
 /** True when the string table offset is not on an `align` boundary. Reads only the header. */

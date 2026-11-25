@@ -79,6 +79,23 @@ const GENERIC_CLOSING_ASK = /^(?:(?:so|okay|ok|alright|all\s+right|and|well|now|
 const STATED_TASK_RE = /\b(?:i'?d\s+like\s+you\s+to|i\s+would\s+like\s+you\s+to|i\s+want\s+you\s+to|we'?d\s+like\s+you\s+to|can\s+you|could\s+you|let'?s|let\s+us|your\s+(?:task|job|challenge)\s+(?:is|will\s+be)\s+to)\s+(?:\w+\s+){0,2}?(?:design|build|implement|write|solve|architect|sketch|model|plan|code|create|estimate|debug)\b/i;
 const GENERIC_CLOSER_MAX_SPAN_MS = 60_000;
 const GENERIC_CLOSER_MAX_TURNS_BACK = 6;
+// MID-SENTENCE SPLIT (#773): the STT provider ends a final in the middle of a
+// sentence ("…what would be a pseudo code? Can you" | "think of?"), and
+// recency picked the tail alone, losing the ask. An interviewer turn with no
+// terminal . ? ! whose last word cannot end a sentence (an article, a
+// possessive, "of", a conjunction, a modal, or a question opener such as
+// "can you") is joined to the interviewer turn that follows within 8s. A
+// trailing "..." is a pause, not an end. "are you" / "is he" are left out:
+// they end real questions ("how are you"), and a greeting joined to the ask
+// after it lowered that ask's confidence on providers without punctuation.
+const MID_SENTENCE_TAIL = /(?:^|\s)(?:(?:a|an|the|my|your|our|their|of|and|or|but|because|whether|than|would|could|should|might|must)|(?:can|could|would|will|should|do|does|did|have|has)\s+(?:you|we|i|they|he|she))$/i;
+const MID_SENTENCE_MAX_GAP_MS = 8_000;
+const MID_SENTENCE_MAX_TURNS_BACK = 4;
+function endsMidSentence(raw: string): boolean {
+    const t = raw.trim().replace(/(?:\.{2,}|…|[\s,;:\-–—])+$/, '');
+    if (!t || /[.?!]["'”’)]*$/.test(t)) return false;
+    return MID_SENTENCE_TAIL.test(t);
+}
 
 // Social-pleasantry chit-chat that is grammatically a question ("did you have
 // any trouble finding parking?", "how was your weekend?", "did you find us
@@ -454,17 +471,35 @@ export function extractLatestQuestion(
     // heuristics robust — it is a FILTER, not a transformation of the output.
     let scoringText = chosen.text.trim();
     let latestQuestion = rawTextAt(chosenIdx) || scoringText;
+    // MID-SENTENCE SPLIT (#773), see MID_SENTENCE_TAIL. firstIdx is the first
+    // turn of the joined sentence; the joins below look back from it.
+    let firstIdx = chosenIdx;
+    for (let j = chosenIdx - 1; j >= 0 && chosenIdx - j <= MID_SENTENCE_MAX_TURNS_BACK; j--) {
+        const turn = cleaned[j];
+        if (turn.role !== 'interviewer') break;
+        if (Math.abs(cleaned[j + 1].timestamp - turn.timestamp) > MID_SENTENCE_MAX_GAP_MS) break;
+        const text = turn.text.trim();
+        const raw = rawTextAt(j) || text;
+        if (!text || GREETING_ONLY.test(text) || GREETING_ONLY.test(raw) || !endsMidSentence(raw)) break;
+        firstIdx = j;
+    }
+    if (firstIdx < chosenIdx) {
+        const span = cleaned.slice(firstIdx, chosenIdx + 1);
+        scoringText = span.map((t) => t.text.trim()).join(' ');
+        latestQuestion = span.map((t, k) => rawTextAt(firstIdx + k) || t.text.trim()).join(' ');
+    }
     // SPLIT CONSTRAINT (issue #539): "Implement an LRU cache with get and put."
     // then, after a pause, "You can assume capacity is positive." Recency picks
     // the constraint, which has no ask of its own, and the turn routes as
     // general. Join it to the interviewer ask right before it — ONE turn back,
     // only when this turn is a pure constraint (no '?', constraint lead) and the
     // previous turn is itself an ask within 30s. Anything else stays recency-only.
-    const prevIdx = chosenIdx - 1;
+    const sentenceRaw = latestQuestion;
+    const prevIdx = firstIdx - 1;
     const prevTurn = prevIdx >= 0 ? cleaned[prevIdx] : null;
     if (prevTurn && prevTurn.role === 'interviewer'
         && !QUESTION_MARK.test(latestQuestion) && SPLIT_CONSTRAINT_LEAD.test(scoringText)
-        && Math.abs(chosen.timestamp - prevTurn.timestamp) <= SPLIT_CONSTRAINT_MAX_GAP_MS) {
+        && Math.abs(cleaned[firstIdx].timestamp - prevTurn.timestamp) <= SPLIT_CONSTRAINT_MAX_GAP_MS) {
         const prevText = prevTurn.text.trim();
         const prevRaw = rawTextAt(prevIdx) || prevText;
         const prevIsAsk = QUESTION_MARK.test(prevRaw) || INTERROGATIVE_LEAD.test(prevText) || TASK_DIRECTIVE.test(prevText);
@@ -475,11 +510,10 @@ export function extractLatestQuestion(
     }
     // GENERIC CLOSER (#741), see GENERIC_CLOSING_ASK. Walks back over the
     // interviewer's own run of turns to the stated ask, and joins all of them.
-    const chosenRaw = rawTextAt(chosenIdx) || chosen.text.trim();
-    if (latestQuestion === chosenRaw
-        && (GENERIC_CLOSING_ASK.test(chosen.text.trim()) || GENERIC_CLOSING_ASK.test(chosenRaw))) {
+    if (latestQuestion === sentenceRaw
+        && (GENERIC_CLOSING_ASK.test(scoringText) || GENERIC_CLOSING_ASK.test(latestQuestion))) {
         let anchorIdx = -1;
-        for (let j = chosenIdx - 1; j >= 0 && chosenIdx - j <= GENERIC_CLOSER_MAX_TURNS_BACK; j--) {
+        for (let j = firstIdx - 1; j >= 0 && chosenIdx - j <= GENERIC_CLOSER_MAX_TURNS_BACK; j--) {
             const turn = cleaned[j];
             if (turn.role !== 'interviewer') break;
             if (Math.abs(chosen.timestamp - turn.timestamp) > GENERIC_CLOSER_MAX_SPAN_MS) break;
@@ -521,7 +555,9 @@ export function extractLatestQuestion(
     // marker on a short turn (length-capped since a bare "that"/"this" is
     // common in ordinary fresh questions too) — AND there's a prior turn to
     // refer back to.
-    const priorTurns = cleaned.slice(0, chosenIdx);
+    // Before the question's first turn: a sentence rejoined above (#773) is
+    // not a prior turn it can refer back to.
+    const priorTurns = cleaned.slice(0, firstIdx);
     const hasPrior = priorTurns.length > 0;
     // ANSWERABILITY FLOOR. Selection is recency-first and has no question-shape
     // requirement (deliberately — see the comment above the walk-back loop), so
