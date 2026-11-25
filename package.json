@@ -152,6 +152,8 @@
       "!**/native-module/target",
       "!**/native-module/src",
       "!**/native-module/.cargo",
+      "!**/native-module/*.node.stale-*",
+      "!**/native-module/*.node.rejected-*",
       "!**/.env",
       "!**/.env.*",
       "!**/*.log",

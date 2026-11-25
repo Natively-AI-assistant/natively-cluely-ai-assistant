@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const { alignStringTable, alignMachOStringTableFile } = require('../lib/macho-align-strtab.cjs');
@@ -100,22 +101,137 @@ test('anything but a thin 64-bit Mach-O is refused, and never reads as misaligne
   assert.equal(alignStringTable.isMisaligned(fat), false);
 });
 
-test('the file step removes the signature, pads, and re-signs ad hoc; an aligned file runs nothing', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-'));
+test('the file step aligns and signs a copy, then puts it in place; an aligned file runs nothing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
   const file = path.join(dir, 'index.darwin-arm64.node');
   const calls = [];
   const run = (cmd, args) => calls.push([cmd, ...args]);
 
   fs.writeFileSync(file, machO({ stroff: 4 + 8 * 40 }));
   assert.equal(alignMachOStringTableFile(file, run), 4);
+  const staged = calls[0][2];
+  assert.notEqual(staged, file, 'the module itself is never left unsigned');
+  assert.equal(path.basename(staged), path.basename(file), 'same name, so the ad-hoc identifier does not change');
   assert.deepEqual(calls, [
-    ['codesign', '--remove-signature', file],
-    ['codesign', '--force', '--sign', '-', file],
+    ['codesign', '--remove-signature', staged],
+    ['codesign', '--force', '--sign', '-', staged],
   ]);
   assert.equal(read(fs.readFileSync(file)).stroff % 8, 0);
+  assert.equal(fs.existsSync(path.dirname(staged)), false, 'the staging copy is removed');
+  assert.deepEqual(fs.readdirSync(dir), ['index.darwin-arm64.node'], 'nothing is left next to the module');
 
   calls.length = 0;
   assert.equal(alignMachOStringTableFile(file, run), 0);
   assert.deepEqual(calls, []);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// #791: the signature used to come off the module itself before the steps that
+// can fail, so a failure left it unsigned, and a failed re-sign left it aligned
+// too, which made the next run return 0 without signing.
+
+test('a layout the aligner refuses leaves the module exactly as it was', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
+  const file = path.join(dir, 'index.darwin-arm64.node');
+  const original = machO({ stroff: 4 + 8 * 40, trailing: 16 });
+  fs.writeFileSync(file, original);
+  const calls = [];
+  const run = (cmd, args) => calls.push([cmd, ...args]);
+
+  assert.throws(() => alignMachOStringTableFile(file, run), /not the last thing/);
+  assert.deepEqual(fs.readFileSync(file), original);
+  assert.ok(calls.every((call) => !call.includes(file)), 'codesign never touched the module');
+  assert.equal(fs.existsSync(path.dirname(calls[0][2])), false, 'the staging copy is removed');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a failed re-sign leaves the module as it was, and the next run still aligns and signs it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
+  const file = path.join(dir, 'index.darwin-arm64.node');
+  const original = machO({ stroff: 4 + 8 * 40 });
+  fs.writeFileSync(file, original);
+  const calls = [];
+  const failingSign = (cmd, args) => {
+    calls.push([cmd, ...args]);
+    if (args.includes('--force')) throw new Error('codesign: the codesign_allocate helper tool cannot be found');
+  };
+
+  assert.throws(() => alignMachOStringTableFile(file, failingSign), /codesign_allocate/);
+  assert.deepEqual(fs.readFileSync(file), original);
+  assert.equal(alignStringTable.isMisaligned(fs.readFileSync(file)), true);
+  assert.equal(fs.existsSync(path.dirname(calls[0][2])), false, 'the staging copy is removed');
+
+  calls.length = 0;
+  const run = (cmd, args) => calls.push([cmd, ...args]);
+  assert.equal(alignMachOStringTableFile(file, run), 4);
+  assert.deepEqual(calls.map((call) => call[1]), ['--remove-signature', '--force']);
+  assert.equal(read(fs.readFileSync(file)).stroff % 8, 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// Read-only directories need POSIX permissions, and root ignores them.
+test('a module that cannot be replaced is left whole, with nothing left beside it', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
+  const file = path.join(dir, 'index.darwin-arm64.node');
+  const original = machO({ stroff: 4 + 8 * 40 });
+  fs.writeFileSync(file, original);
+  const run = () => {};
+
+  fs.chmodSync(dir, 0o555);
+  try {
+    assert.throws(() => alignMachOStringTableFile(file, run), /EACCES|EPERM/);
+  } finally {
+    fs.chmodSync(dir, 0o755);
+  }
+  assert.deepEqual(fs.readFileSync(file), original);
+  assert.deepEqual(fs.readdirSync(dir), ['index.darwin-arm64.node']);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// The pid of a process that has exited, so a swap file named for it is a leftover.
+const deadPid = () => spawnSync(process.execPath, ['-e', '']).pid;
+
+test('a swap file left by a killed run is deleted on the next run, even when nothing needs aligning', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
+  const file = path.join(dir, 'index.darwin-arm64.node');
+  fs.writeFileSync(file, machO({ stroff: 8 * 41 }));
+  const dead = deadPid();
+  fs.writeFileSync(`${file}.stale-align-${dead}`, 'half-written');
+  fs.writeFileSync(path.join(dir, `index.darwin-x64.node.stale-align-${dead}`), 'the other module');
+  const calls = [];
+
+  assert.equal(alignMachOStringTableFile(file, (cmd, args) => calls.push([cmd, ...args])), 0);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['index.darwin-arm64.node', `index.darwin-x64.node.stale-align-${dead}`]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a swap file of a build that is still running is left alone', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
+  const file = path.join(dir, 'index.darwin-arm64.node');
+  fs.writeFileSync(file, machO({ stroff: 8 * 41 }));
+  const live = `index.darwin-arm64.node.stale-align-${process.ppid}`;
+  fs.writeFileSync(path.join(dir, live), 'mid-swap');
+
+  assert.equal(alignMachOStringTableFile(file, () => {}), 0);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['index.darwin-arm64.node', live]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// Creating a symlink on Windows needs Developer Mode or admin rights.
+test('through a symlink, the module it points to is aligned and the link stays a link', { skip: process.platform === 'win32' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-macho-align-test-'));
+  const real = path.join(dir, 'build', 'index.darwin-arm64.node');
+  fs.mkdirSync(path.dirname(real));
+  fs.writeFileSync(real, machO({ stroff: 4 + 8 * 40 }));
+  const link = path.join(dir, 'index.darwin-arm64.node');
+  fs.symlinkSync(real, link);
+  const calls = [];
+
+  assert.equal(alignMachOStringTableFile(link, (cmd, args) => calls.push([cmd, ...args])), 4);
+  assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+  assert.equal(read(fs.readFileSync(real)).stroff % 8, 0);
+  assert.equal(path.basename(calls[0][2]), 'index.darwin-arm64.node');
+  assert.deepEqual(fs.readdirSync(path.dirname(real)), ['index.darwin-arm64.node'], 'no swap file left by the module');
   fs.rmSync(dir, { recursive: true, force: true });
 });
