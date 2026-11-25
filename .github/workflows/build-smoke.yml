@@ -261,15 +261,14 @@ jobs:
         if: runner.os == 'Windows'
         run: node scripts/verify-packaged-local-assets.mjs --app release/win-unpacked --platform win32
 
-      # `napi build` above rewrote native-module/index.js and index.d.ts from
-      # the Windows-only Rust, dropping the macOS-only exports. The tests below
-      # (NativeBindingsCoverBothPlatforms) check the COMMITTED files, which
-      # must list both platforms; put them back. After packaging, so the
-      # package is built exactly as before. The app loads the .node binary
-      # directly (nativeModuleLoader.ts), so nothing that runs changes.
-      - name: Restore the committed native-module index files (Windows)
+      # native-module/index.js and index.d.ts list both platforms' exports and
+      # are kept by hand (NativeBindingsCoverBothPlatforms). build-native.js
+      # passes --no-js and sends napi's type file into target/, so the real
+      # Windows build above must leave them exactly as committed. It used to
+      # rewrite them from the Windows-only Rust, and this step put them back.
+      - name: Check the native build left the committed index files alone (Windows)
         if: runner.os == 'Windows'
-        run: git checkout -- native-module/index.js native-module/index.d.ts
+        run: git diff --exit-code -- native-module/index.js native-module/index.d.ts
 
       # Windows runs these ADVISORY (2026-08-10). Previously both steps were
       # skipped outright on Windows, which meant the windows-latest leg reported

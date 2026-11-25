@@ -591,6 +591,11 @@ const ANSWER_LENGTHS: Array<{ value: AnswerLength; label: string; description: s
     { value: 'longer', label: 'Longer', description: 'Fuller answers, 90–200 words' },
 ];
 
+// Shown instead of the length's own line when the active mode's Real-time
+// prompt sets the length ("Keep every answer under 40 words"): answers follow
+// the prompt, and the row would otherwise promise a length they do not use.
+const SET_BY_PROMPT_LINE = "Your mode's Real-time prompt sets the length";
+
 /**
  * How long live answers run, for the whole app (electron/llm/answerLength.ts).
  * It lived in the Modes editor, per mode, until Evin moved it here 2026-11-15.
@@ -604,11 +609,16 @@ const AnswerLengthRow: React.FC = () => {
     const t = useT();
     const [value, setValue] = useState<AnswerLength>('smart');
     const [note, setNote] = useState<string | null>(null);
+    // The active mode's Real-time prompt sets the length, so answers follow it, not this row (#794).
+    const [setByPrompt, setSetByPrompt] = useState(false);
     const cells = useRef<Array<HTMLButtonElement | null>>([]);
 
     useEffect(() => {
         window.electronAPI?.getAnswerLength?.()
-            .then((res) => { if (res?.value) setValue(res.value); })
+            .then((res) => {
+                if (res?.value) setValue(res.value);
+                setSetByPrompt(res?.setByRealtimePrompt === true);
+            })
             .catch(() => { /* reads as Smart, which is what answers then use */ });
     }, []);
 
@@ -673,8 +683,8 @@ const AnswerLengthRow: React.FC = () => {
             <SettingsRow
                 icon={<AlignLeft size={20} />}
                 title={t('Answer length')}
-                description={note ?? t(ANSWER_LENGTHS[index].description)}
-                descriptionKey={note ? 'note' : value}
+                description={note ?? (setByPrompt ? t(SET_BY_PROMPT_LINE) : t(ANSWER_LENGTHS[index].description))}
+                descriptionKey={note ? 'note' : setByPrompt ? 'prompt' : value}
                 control={control}
             />
         </div>

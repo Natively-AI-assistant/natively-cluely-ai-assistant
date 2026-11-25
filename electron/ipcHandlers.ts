@@ -6668,7 +6668,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   return getRegisteredAnswerLength();
                 } catch { return 'smart' as const; }
               })();
-              const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat, measuredLength);
+              const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat, measuredLength, { documentOpenQuestion: answerPlan.documentOpenQuestion });
               piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakability_measured', speakabilityClass: budget.speakability_class, markerCount: budget.spoken_word_count, answerLength: measuredLength });
               // Visible scaffold in a DEFAULT-style answer (user didn't ask for
               // structure): compress to the speakable form. detectAnswerStyle
@@ -9434,9 +9434,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Settings › Overlay › Answer length (llm/answerLength.ts). get answers with
   // what answers use now: Smart without Pro, whatever is stored. Shorter and
   // Longer are Pro; going back to Smart is turning it off, which stays free.
+  // `setByRealtimePrompt`: the active mode's Real-time prompt sets the length,
+  // so the setting stands down (registeredInstructionsSetLength) and the row
+  // says so instead of a length answers will not use (#794).
   safeHandle('answer-length:get', async () => {
     const { effectiveAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
-    return { value: effectiveAnswerLength(SettingsManager.getInstance().get('answerLength'), isProOrTrialActive()) };
+    let setByRealtimePrompt = false;
+    try {
+      const { registeredInstructionsSetLength } = require('./llm/userInstructionContract') as typeof import('./llm/userInstructionContract');
+      setByRealtimePrompt = registeredInstructionsSetLength(null);
+    } catch { /* reads as not set: the row shows the setting's own line */ }
+    return { value: effectiveAnswerLength(SettingsManager.getInstance().get('answerLength'), isProOrTrialActive()), setByRealtimePrompt };
   });
 
   safeHandle('answer-length:set', async (_, value: unknown) => {

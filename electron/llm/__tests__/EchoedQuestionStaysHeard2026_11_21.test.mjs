@@ -255,10 +255,16 @@ describe('the claim verifier in the interview modes runs only without documents 
   test('General without a file runs the pass only when the draft states the user\'s own setup as fact (2026-11-22)', () => {
     const noDocuments = cv.materialHasNoDocuments(TRANSCRIPT);
     // The two flat answers from the meeting re-test.
-    for (const draft of ['I report to an engineering manager on the delivery side.', 'We use CI for every merge, so builds run on each pull request.', 'Our sprints run two weeks.', 'Yeah, we do. Sprints run **two weeks** on our side, with the usual standups.']) {
+    for (const draft of ['I report to an engineering manager on the delivery side.', 'We use CI for every merge, so builds run on each pull request.', 'Our sprints run two weeks.', 'Yeah, we do. Sprints run **two weeks** on our side, with the usual standups.',
+      // #792 live run (2026-11-25): a hedge that still names the user's tooling as fact.
+      'I\'d check the launch-day user count and the churn rate from our dashboards and send both over.', 'Our analytics show churn under 3%.', 'We track that in our CRM.']) {
       assert.equal(cv.claimVerifierRunsWithoutDocuments('general', draft), true, draft);
       assert.equal(cv.claimVerifierKind({ modeId: 'general', question: 'Who do you report to?', draft, surface: 'spoken', noDocuments }), 'life', draft);
     }
+    // A system-design answer's "our system" / "our metrics service" is the design on the table, not the
+    // user's setup: Technical Interview keeps its no-pass result for it.
+    for (const draft of ['In our system, requests go through a load balancer, and our metrics service scrapes each node.'])
+      assert.equal(cv.claimVerifierKind({ modeId: 'technical-interview', question: 'Design a URL shortener.', draft, surface: 'spoken', noDocuments }), null, draft);
     // Hedged or not about the user's setup: no pass, so the press keeps the F-LAT-04 latency.
     for (const draft of ['Usually that\'s an engineering manager, I can confirm the exact line.', 'Merge sort is O(n log n) in every case.', 'Sounds good, let\'s pick it up Thursday.'])
       assert.equal(cv.claimVerifierRunsWithoutDocuments('general', draft), false, draft);
@@ -266,6 +272,9 @@ describe('the claim verifier in the interview modes runs only without documents 
     const p = cv.claimVerifierSystemPrompt('general', 'spoken', { noDocuments });
     assert.match(p, /Nothing about the speaker's own setup is loaded/);
     assert.match(p, /change only that phrase into its typical, hedged form/);
+    // #792 live run: "from our dashboards" names no tool, so it slipped through (2/10 removed on the
+    // Natively API); naming a kept system or record as [self] removed it 9/10.
+    assert.match(p, /a system or record they keep \("our dashboards", "our CRM"/);
     assert.doesNotMatch(p, /candidate|interviewer/);
     assert.doesNotMatch(cv.claimVerifierSystemPrompt('general', 'spoken', { noDocuments: false }), /typical, hedged form/);
     assert.doesNotMatch(cv.claimVerifierSystemPrompt('general', 'typed', { noDocuments }), /typical, hedged form/);

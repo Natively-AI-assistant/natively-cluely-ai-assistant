@@ -1345,7 +1345,7 @@ export interface ElectronAPI {
   }>;
   setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
   /** Settings › Overlay › Answer length. get: what answers use now (Smart without Pro). */
-  getAnswerLength: () => Promise<{ value: 'shorter' | 'smart' | 'longer' }>;
+  getAnswerLength: () => Promise<{ value: 'shorter' | 'smart' | 'longer'; setByRealtimePrompt?: boolean }>;
   setAnswerLength: (value: 'shorter' | 'smart' | 'longer') => Promise<{ success: boolean; error?: string; message?: string }>;
   cropperPickDisplay: () => void;
   cropperDrag: (active: boolean) => void;

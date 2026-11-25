@@ -25,6 +25,8 @@
 
 import { renderUserInstructionSystemLayer } from './userInstructionContract';
 import { extractPositionParts, missingPositionLabels } from './positionList';
+import { detectRequestedProperty } from '../intelligence/context-os/requestedPropertyDetector';
+import { textCanProveProperty } from '../intelligence/context-os/requestedProperty';
 
 export const DOCUMENT_GROUNDED_SYSTEM_OVERRIDE = [
   '',
@@ -499,7 +501,13 @@ export function classifyDocumentQuestionShape(question: string, priorContext?: s
   const hasPrior = Boolean(priorContext && priorContext.trim());
   if (/\b(it|its|that|this|they|them|those|these|there|the same)\b/i.test(q) && hasPrior) return 'document_followup_answer';
   if (/\b(what is this (document|paper|thesis) about|summari[sz]e|overview|main topic|high[- ]level|gist)\b/i.test(l)) return 'broad_overview';
-  if (/\b(total cost|cost of|price of|priced|budget|expense|expenses|cloud provider|vendor|participants?|leaderboard|public leaderboard)\b/i.test(l)) return 'document_absent_fact_refusal';
+  // No shape is "absent" from the question's words alone (2026-11-25). A word
+  // list here (cost, budget, vendor, participants, cloud provider, leaderboard —
+  // the questions of one benchmark paper) sent "How does the study measure
+  // participant engagement?" down the refusal lane before anything was
+  // retrieved. Whether a fact is absent is decided from the evidence, in
+  // computeEvidenceCoverage. 'document_absent_fact_refusal' stays a valid
+  // answerType for a caller that passes it explicitly.
   if (/\btable\s+of\s+contents\b|\b(?:title|name)\s+of\s+(?:chapter|section)\s+\d{1,2}\b|\b(?:what|which)\s+page\s+(?:does|do|is|are|begins?|starts?)\b|\b(?:how\s+many|number\s+of)\s+(?:chapters?|sections?|pages?)\b|\bchapter\s+\d{1,2}\b/i.test(l)) return 'document_structure_answer';
   // Definitional answer (Fix 4 / round-8): "what is X?" where X is a single named
   // entity (model / framework / concept), NOT a list-shaped quantifier ("two
@@ -799,6 +807,10 @@ export interface EvidenceCoverage {
   selectedSectionCount: number;
   shouldRefuse: boolean;
   reason: string;
+  /** The property the question asks for (requestedPropertyDetector, or a local absent probe: vendor_or_supplier, ranking), 'unknown' when none. */
+  requestedProperty: string;
+  /** The question asks for a property and no evidence can prove it: the fact is absent from what was retrieved. */
+  propertyEvidenceMissing: boolean;
 }
 
 // ── Evidence-block tokenisation for the post-stream validator ────────────────
@@ -839,6 +851,49 @@ export function splitEvidenceSnippets(retrievedBlock: string | null | undefined)
   return out.length ? out : [block];
 }
 
+// The facts the absent-fact refusal may fire on: the ones the old question
+// word list targeted (cost, cloud provider, participant counts), now checked
+// against the evidence instead of the wording. Kept to these on purpose: every
+// other property the detector knows (methodology, results, hardware ...) never
+// had a refusal gate, and adding one would make doc answers refuse MORE often.
+const ABSENT_PROBE_PROPERTIES: ReadonlySet<string> = new Set(['cost_or_price', 'cloud_provider', 'human_participants']);
+
+// Two facts the old list also covered that the canonical table (context-os
+// PROPERTY_RULES) has no property for: who supplied something, and where a
+// result ranked. Without a check, an invented "The vendor was Siemens" or
+// "It ranked 3rd" shipped: a plain name or an ordinal is not caught by the
+// numeric/entity claim checks. Kept HERE, used only by this refusal decision:
+// a PROPERTY_RULES entry would also start gating meeting, profile and manual-
+// chat evidence app-wide (ipcHandlers' insufficient-property answer, the
+// evidence orchestrator), which is a separate change.
+const LOCAL_ABSENT_PROBES: ReadonlyArray<{ property: string; question: RegExp; evidence: RegExp }> = [
+  {
+    property: 'vendor_or_supplier',
+    question: /\b(?:vendors?|suppliers?|manufacturers?|supplied\s+by|purchased\s+from|bought\s+from|sourced\s+from)\b/i,
+    evidence: /\b(?:vendors?|suppliers?|manufacturers?|manufactured\s+by|made\s+by|supplied\s+by|purchased\s+from|bought\s+from|sourced\s+from|procured\s+from|provided\s+by)\b/i,
+  },
+  {
+    property: 'ranking',
+    // "place" is only a ranking word beside a result: "put in place at the start"
+    // and "what place does the survey have in the design" asked about content
+    // that was in the document and were refused (review, 2026-11-25). "placed"
+    // counts only with an ordinal, so "where was the sensor placed in" stays out.
+    question: /\bleaderboards?\b|\bwhat\s+(?:rank|place|position)\b(?!\s+(?:does|do|did|will|would|should|can|could)\b[^?]*\b(?:have|hold|play|occupy|take)\b)|\branked?\s+(?:on|in|at)\b|\bplaced\s+(?:#?\d+(?:st|nd|rd|th)?|first|second|third|last|top)\b/i,
+    evidence: /\bleaderboards?\b|\branked\b|\branking\b|\brank\s+(?:#?\d|first|second|third|top)\b|\bplaced\b|\b\d+(?:st|nd|rd|th)\s+place\b|\btop[- ]\d+\b/i,
+  },
+];
+
+/** The fact the question asks for that a document may leave out, read against the evidence. */
+const absentProbeFor = (question: string, retrievedBlock: string): { property: string; missing: boolean } => {
+  const requestedProperty = detectRequestedProperty(question);
+  if (ABSENT_PROBE_PROPERTIES.has(requestedProperty)) {
+    return { property: requestedProperty, missing: !textCanProveProperty(retrievedBlock, requestedProperty) };
+  }
+  const local = LOCAL_ABSENT_PROBES.find((p) => p.question.test(question));
+  if (local) return { property: local.property, missing: !local.evidence.test(retrievedBlock) };
+  return { property: requestedProperty, missing: requestedProperty !== 'unknown' && !textCanProveProperty(retrievedBlock, requestedProperty) };
+};
+
 export function computeEvidenceCoverage(params: {
   question: string;
   retrievedBlock: string;
@@ -855,9 +910,18 @@ export function computeEvidenceCoverage(params: {
   const hasDefinitionEvidence = scored.some(s => s.hasDefinitionEvidence);
   const selectedSectionCount = new Set([...String(params.retrievedBlock || '').matchAll(/\[Section\s+([\d.]+)/g)].map(m => m[1])).size;
   const hasOkfEvidence = params.hasOkfEvidence === true || /STRUCTURED KNOWLEDGE CARDS|Direct quote/i.test(params.retrievedBlock || '');
+  // ABSENT is read from the evidence: the question asks for one of the facts
+  // documents often leave out (ABSENT_PROBE_PROPERTIES) and nothing retrieved
+  // can prove it. A caller's explicit 'document_absent_fact_refusal' counts
+  // only when the question names no such property to check against.
+  const probe = absentProbeFor(String(params.question || ''), String(params.retrievedBlock || ''));
+  const requestedProperty = probe.property;
+  const propertyEvidenceMissing = probe.missing;
+  const probed = ABSENT_PROBE_PROPERTIES.has(requestedProperty) || LOCAL_ABSENT_PROBES.some((p) => p.property === requestedProperty);
+  const absentProbe = probed ? propertyEvidenceMissing : queryShape === 'document_absent_fact_refusal';
   let shouldRefuse = false;
   let reason = 'sufficient_evidence';
-  if (queryShape === 'document_absent_fact_refusal' && topAnswerability < 0.18 && !hasOkfEvidence) {
+  if (absentProbe && topAnswerability < 0.18 && !hasOkfEvidence) {
     shouldRefuse = true; reason = 'absent_fact_no_answer_coverage';
   } else if (!params.retrievedBlock?.trim()) {
     shouldRefuse = true; reason = 'no_retrieved_evidence';
@@ -866,7 +930,7 @@ export function computeEvidenceCoverage(params: {
   } else if (queryShape === 'list_answer' && !hasListEvidence && !hasOkfEvidence) {
     reason = 'weak_list_coverage';
   }
-  return { queryShape, topAnswerability, hasExactEntity, hasNumericEvidence, hasListEvidence, hasDefinitionEvidence, hasOkfEvidence, selectedSectionCount, shouldRefuse, reason };
+  return { queryShape, topAnswerability, hasExactEntity, hasNumericEvidence, hasListEvidence, hasDefinitionEvidence, hasOkfEvidence, selectedSectionCount, shouldRefuse, reason, requestedProperty, propertyEvidenceMissing };
 }
 
 export function detectAbsentFactQuestion(question: string): boolean {
@@ -991,6 +1055,22 @@ const REFUSAL_PHRASE_RE = /not\s+(?:directly\s+)?(?:mentioned|specified|stated|p
 // the assistant's own epistemic state.
 const SELF_REFERENTIAL_SUBJECT_RE = /^(?:this|it|that|these|those)(?:\s+(?:is|are|was|were))?$/i;
 
+// "The vendor is not mentioned in the uploaded material." names a subject, yet
+// it is the assistant reporting what the MATERIAL lacks: the absence is located
+// in the uploaded document itself. A clause whose subject REPORTS something
+// ("The manual states the position is not mentioned in the confirmed set") is
+// still about that third party, so a reporting verb before the phrase keeps the
+// subject rule (2026-11-25).
+const MATERIAL_ABSENCE_RE = /\b(?:(?:is|are|was|were)\s+not|isn['’]t|aren['’]t|wasn['’]t|weren['’]t)\s+(?:directly\s+|explicitly\s+|clearly\s+)?(?:mentioned|specified|stated|provided|included|given|listed|found|covered|described|reported)\s+(?:anywhere\s+)?in\s+(?:the|your|this)\s+(?:uploaded\s+|provided\s+|retrieved\s+|reference\s+)?(?:material|materials|documents?|files?|sections?|excerpts?|paper|thesis)\b/i;
+// The same report with the MATERIAL as subject, the way the production model
+// actually words it: "The retrieved excerpts do not state a total cost",
+// "The document doesn't mention any dropouts". Measured live on the Natively
+// API 2026-11-25 (12 questions x 3): every honest absent answer opened this
+// way, and each one was replaced by the app's flat refusal, dropping the
+// general-knowledge answer the evidence rule asks for.
+const MATERIAL_SUBJECT_ABSENCE_RE = /^(?:the|these|this|your)\s+(?:retrieved\s+|uploaded\s+|provided\s+|reference\s+)?(?:excerpts?|passages?|sections?|snippets?|documents?|material|materials|files?|paper|thesis|sources?)\s+(?:do|does|did)\s*(?:not|n['’]t)\s+(?:directly\s+|explicitly\s+|clearly\s+)?(?:state|mention|name|say|specify|include|give|provide|list|report|cover|identify|contain|describe)\b/i;
+const REPORTING_VERB_RE = /\b(?:states?|stated|says?|said|notes?|noted|reports?|reported|shows?|showed|explains?|explained|describes?|described|mentions?|mentioned|claims?|claimed|indicates?|indicated|specifies|specified|confirms?|confirmed)\b/i;
+
 export function isAssistantRefusal(answer: string): boolean {
   const trimmed = (answer || '').trim();
   if (!trimmed) return false;
@@ -1009,6 +1089,73 @@ export function isAssistantRefusal(answer: string): boolean {
   return false;
 }
 
+/**
+ * Does the answer OPEN by saying the uploaded material does not hold the fact?
+ * "The retrieved excerpts do not state a total cost. From general knowledge
+ * ...", "The vendor is not mentioned in the uploaded material." That is the
+ * honest answer the evidence rule asks for when a fact is absent, so the
+ * validator lets it stand instead of swapping in the flat canonical refusal.
+ *
+ * Used ONLY where the evidence check already agrees the fact is absent
+ * (coverage.shouldRefuse). isAssistantRefusal stays as it was for every other
+ * caller: an answer that says "the excerpts don't state whether anyone dropped
+ * out" and then gives the grounded context is not a bare decline, and the
+ * false-refusal retry must not regenerate it (measured live 2026-11-25).
+ */
+export function isMaterialAbsenceReport(answer: string, context?: { question: string; evidence: string; property?: string }): boolean {
+  const trimmed = (answer || '').trim();
+  if (!trimmed) return false;
+  if (isAssistantRefusal(trimmed)) return true;
+  const firstSentenceMatch = trimmed.match(/^[^.!?]*[.!?]?/);
+  const leadSentence = (firstSentenceMatch ? firstSentenceMatch[0] : trimmed).trim();
+  // "<the fact> is not mentioned / isn't stated in the uploaded material",
+  // unless the subject itself reports something ("the manual states ...").
+  const absence = leadSentence.match(MATERIAL_ABSENCE_RE);
+  const opensWithAbsence = MATERIAL_SUBJECT_ABSENCE_RE.test(leadSentence)
+    || (Boolean(absence) && !REPORTING_VERB_RE.test(leadSentence.slice(0, absence!.index)));
+  if (!opensWithAbsence) return false;
+  // An honest opening followed by the missing fact anyway ("The excerpts do not
+  // state the vendor. It was Siemens.") is an invention, not a report (review,
+  // 2026-11-25). Only text presented as the document's is checked.
+  return !context || !statesUnsupportedProperty(trimmed, context);
+}
+
+// Where the answer stops speaking for the document. Live answers that label
+// general knowledge keep that framing to the end, often across sentences or in
+// brackets ("From general knowledge, a rig like this usually costs ...",
+// "(As general knowledge: ...)"), so everything from the first marker on is
+// the model's own and may name a vendor or a figure.
+const GENERAL_KNOWLEDGE_MARKER_RE = /\b(?:general\s+knowledge|generally|in\s+general|typically|usually|commonly|as\s+a\s+rule|not\s+(?:from|in)\s+(?:the|your)\s+(?:documents?|excerpts?|material|files?|passages?)|outside\s+(?:the|your)\s+(?:documents?|material|files?)|can(?:not|['’]t)\s+confirm|would\s+need\s+to\s+(?:check|confirm|verify))\b/i;
+const NUMBER_TOKEN_RE = /(?:[$€£¥]\s?)?\b\d+(?:[.,]\d+)*(?:st|nd|rd|th)?\b/g;
+const ORDINAL_WORD_RE = /\b(?:first|second|third|fourth|fifth|top|last)\b/gi;
+// A name mid-sentence: a capitalised word not at a sentence start.
+const NAME_TOKEN_RE = /(?<![.!?]\s|^|\n|["“(]\s?)\b[A-Z][\w&.-]*[A-Za-z\d]/g;
+
+// "$5,000" and "5000", "3rd" and "3" are the same value. Whole tokens only: a
+// substring test let an invented "$20" or "3rd" through on evidence that says
+// "200 episodes" and "30 hours".
+const numberKey = (token: string): string =>
+  token.replace(/^[$€£¥]\s?/, '').replace(/(?<=\d),(?=\d{3}\b)/g, '').replace(/(?:st|nd|rd|th)$/i, '').toLowerCase();
+const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/** Does the document-voiced part of the answer state the requested fact with a value the evidence and question never give? */
+function statesUnsupportedProperty(answer: string, context: { question: string; evidence: string; property?: string }): boolean {
+  const marker = answer.search(GENERAL_KNOWLEDGE_MARKER_RE);
+  const voiced = marker === -1 ? answer : answer.slice(0, marker);
+  const known = `${context.question}\n${context.evidence}`;
+  const knownNumbers = new Set((known.match(NUMBER_TOKEN_RE) ?? []).map(numberKey));
+  const knownWords = new Set(wordsOf(known));
+  const property = context.property ?? detectRequestedProperty(context.question);
+  const unseenNumber = (t: string) => !knownNumbers.has(numberKey(t));
+  const unseenWords = (t: string) => wordsOf(t).some((w) => !knownWords.has(w));
+  if ((property === 'cost_or_price' || property === 'human_participants' || property === 'ranking')
+    && (voiced.match(NUMBER_TOKEN_RE) ?? []).some(unseenNumber)) return true;
+  if (property === 'ranking' && (voiced.match(ORDINAL_WORD_RE) ?? []).some(unseenWords)) return true;
+  if ((property === 'vendor_or_supplier' || property === 'cloud_provider')
+    && (voiced.match(NAME_TOKEN_RE) ?? []).some(unseenWords)) return true;
+  return false;
+}
+
 export function validateDocumentGroundedAnswer(params: {
   question: string;
   answer: string;
@@ -1021,7 +1168,11 @@ export function validateDocumentGroundedAnswer(params: {
   const queryShape = (params.answerType as DocumentQuestionShape) || classifyDocumentQuestionShape(params.question);
   const coverage = computeEvidenceCoverage({ question: params.question, retrievedBlock: params.retrievedBlock, queryShape, hasOkfEvidence: params.hasOkfEvidence });
   if (!answer.trim() || /^\s*(hey|hello|hi)\b/i.test(answer)) return { ok: false, action: 'retry', reason: 'empty_or_greeting', coverage, missing: [] };
-  if (coverage.shouldRefuse) return { ok: isRefusal, action: isRefusal ? 'ship' : 'refuse', reason: coverage.reason, coverage, missing: [] };
+  if (coverage.shouldRefuse) {
+    // The evidence says the fact is absent; an answer that says so stands.
+    const declines = isRefusal || isMaterialAbsenceReport(answer, { question: params.question, evidence: params.retrievedBlock, property: coverage.requestedProperty });
+    return { ok: declines, action: declines ? 'ship' : 'refuse', reason: coverage.reason, coverage, missing: [] };
+  }
   if (isRefusal && (coverage.hasExactEntity || coverage.hasNumericEvidence || coverage.hasListEvidence || coverage.hasDefinitionEvidence || coverage.hasOkfEvidence)) {
     return { ok: false, action: 'retry', reason: 'false_refusal_evidence_exists', coverage, missing: [] };
   }

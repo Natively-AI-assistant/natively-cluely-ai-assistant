@@ -25,8 +25,17 @@ test('no start given, or a start in the future: it starts now', () => {
 test('What to answer passes the press time to the engine, which starts its trace from it', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const handler = ipc.split("'generate-what-to-say',")[1].split('safeHandle(')[0];
-  assert.ok(handler.indexOf('const pressedAt = tracerNow();') < handler.indexOf('return _tracked(async () => {'), 'taken before any work');
-  assert.ok(handler.indexOf('const pressedAt = tracerNow();') < handler.indexOf('screen pre-pass'));
+  // Every position must be found: a missing marker is -1 and made these
+  // comparisons fail for the wrong reason once `return _tracked(` became
+  // `pressResult = await _tracked(` (answer-press counting, 2026-11-19).
+  const at = (marker) => {
+    const i = handler.indexOf(marker);
+    assert.ok(i >= 0, `${marker} not found in the What to answer handler`);
+    return i;
+  };
+  const pressedAt = at('const pressedAt = tracerNow();');
+  assert.ok(pressedAt < at('_tracked(async () => {'), 'taken before any work');
+  assert.ok(pressedAt < at('screen pre-pass'));
   assert.match(handler, /screenContext,\s*pressedAt,/);
   assert.match(read('electron/IntelligenceEngine.ts'), /\.\.\.\(typeof options\?\.pressedAt === 'number' \? \{ startedAt: options\.pressedAt \} : \{\}\),/);
 });

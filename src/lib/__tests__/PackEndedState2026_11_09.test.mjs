@@ -47,8 +47,12 @@ test('network errors, no key and good answers are not an ended pack', () => {
   assert.equal(endedPackFromRefusal(null, lastPack), null);
 });
 
+// Before lastPack's ends_at. Without a fixed clock this test failed from the
+// moment that date passed: the code rightly reads the pack as ended then.
+const BEFORE_PACK_ENDS = Date.parse('2026-11-20T00:00:00Z');
+
 test('banner: no meeting line under 90% used', () => {
-  assert.equal(packMeetingBucket(lastPack.pack), null);
+  assert.equal(packMeetingBucket(lastPack.pack, 90, BEFORE_PACK_ENDS), null);
 });
 
 test('banner: meeting line from 90% used, with time left', () => {
