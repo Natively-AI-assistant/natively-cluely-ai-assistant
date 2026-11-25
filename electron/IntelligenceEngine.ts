@@ -1051,6 +1051,32 @@ export class IntelligenceEngine extends EventEmitter {
         return speechWindowForPrompt(this.session.getFormattedSpeech(SPEECH_WINDOW_SECONDS, { includeTyped: true }));
     }
 
+    /**
+     * The earlier chat for the manual-answer fallback (the V3 composer built
+     * nothing). That fallback used to read the rolling window, which held the
+     * last answer, so "make it shorter" could see what to shorten; the speech
+     * window does not hold answers. Mirrors what V3 sends: the ring when Chat
+     * history is on, else the one previous question and answer, as a referent.
+     * '' when there is none or the transcript may not be sent.
+     */
+    private earlierChatForManualFallback(transcript: string, question: string): string {
+        const ring = this.conversationHistoryText(transcript);
+        if (ring) return ring;
+        try {
+            const { isScopeDenied, readProviderScopePolicy } = require('./context-intelligence/policies/provider-scope-policy') as
+                typeof import('./context-intelligence/policies/provider-scope-policy');
+            if (isScopeDenied('transcript', readProviderScopePolicy())) return '';
+            const { getConversationState } = require('./context-intelligence/question/conversation-state-store') as
+                typeof import('./context-intelligence/question/conversation-state-store');
+            const cs = getConversationState(this.conversationSessionId());
+            const prevQ = cs?.previousQuestion?.trim();
+            // A bridge that advanced the state before failing left THIS question there.
+            if (!prevQ || prevQ === question.trim()) return '';
+            return `Previous question: ${prevQ}`
+                + (cs?.previousAnswerSummary ? `\nPrevious answer (referent only, NOT evidence): ${cs.previousAnswerSummary}` : '');
+        } catch { return ''; }
+    }
+
     /** A transcript window and the conversation history, as one context string. */
     private withConversationHistory(transcript: string | null | undefined): string {
         const text = String(transcript ?? '');
@@ -9078,9 +9104,12 @@ export class IntelligenceEngine extends EventEmitter {
                 const _docEnforced = (activeModeInfo as any)?.strictDocumentGroundedActive === true
                     || (activeModeInfo?.documentGroundedCustomModeActive === true
                         && Boolean((activeModeInfo as any)?.hasReferenceFiles));
-                const transcriptContext = _docEnforced || isCodingAnswerType(answerPlan.answerType)
+                const speech = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
                     : this.recentSpeechForPrompt();
+                const transcriptContext = speech === undefined
+                    ? undefined
+                    : [this.earlierChatForManualFallback(speech, question), speech].filter((part) => part.trim()).join('\n\n');
                 // About you, the mode's Real-time prompt facts and "Use in every
                 // answer" skills, which the V3 branch above carries (2026-11-09).
                 // Scoped by this turn's answer type, so a coding turn gets the

@@ -20,7 +20,7 @@ import {
 
 const { IntelligenceEngine } = require(dist('IntelligenceEngine.js'));
 const { SessionTracker } = require(dist('SessionTracker.js'));
-const { clearConversationState } = require(dist('context-intelligence/question/conversation-state-store.js'));
+const { clearConversationState, recordAnswerSummary } = require(dist('context-intelligence/question/conversation-state-store.js'));
 const { SPEECH_WINDOW_MAX_CHARS } = require(dist('llm/conversationHistoryPolicy.js'));
 
 isolateSingletons();
@@ -136,6 +136,43 @@ describe('quick actions are handed the setup said more than 180 s ago', () => {
     await e.runBrainstorm(undefined, 'Shard the write path');
     assert.ok(String(seen).length <= SPEECH_WINDOW_MAX_CHARS + 2000, `context ${String(seen).length} chars`);
     assert.match(String(seen), /line 119 /);
+  });
+});
+
+describe('typed chat fallback (V3 composed nothing) still sees the previous answer', () => {
+  beforeEach(() => { setScopes({}); fakeCredentials(); clearConversationState(SESSION); });
+
+  const run = async (historyEnv) => {
+    const prev = process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN;
+    if (historyEnv === undefined) delete process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN;
+    else process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN = historyEnv;
+    try {
+      recordAnswerSummary(SESSION, 'Use a token bucket per user, refilled every second, PREV-ANSWER.', undefined, 'How do I rate limit the API?');
+      let seen = null;
+      const e = engine({
+        session: meeting(),
+        getActiveModeInfo: () => null,
+        v3ModeRetrievalContext: () => null,
+        recordLiveTurn: () => {},
+        answerLLM: { generate: async (_q, context) => { seen = context; return 'Shorter.'; } },
+      });
+      await e.runManualAnswer('make it shorter');
+      return String(seen);
+    } finally {
+      if (prev === undefined) delete process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN; else process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN = prev;
+    }
+  };
+
+  test('Chat history on: the earlier exchange is in the context, with the meeting speech', async () => {
+    const seen = await run(undefined);
+    assert.match(seen, /PREV-ANSWER/);
+    assert.match(seen, /ID-SETUP/);
+  });
+
+  test('Chat history off: the one previous question and answer, as a referent', async () => {
+    const seen = await run('0');
+    assert.match(seen, /Previous question: How do I rate limit the API\?/);
+    assert.match(seen, /Previous answer \(referent only, NOT evidence\): .*PREV-ANSWER/);
   });
 });
 
