@@ -348,6 +348,32 @@ describe('follow-ups and questions about other work', () => {
     await ctx.buildRepoContext('What does addOrderItems do?', [readyProshop], { sessionId: 'c' });
     assert.equal(await ctx.buildRepoContext('Did you do that at your last company too?', [readyProshop], { sessionId: 'c' }), '');
   });
+  test('a long follow-up that names nothing carries when it shares words with the repository', async () => {
+    // Live 2026-11-25: "And how does password reset work there? How long is the
+    // reset link valid for?" (15 words, after a Microblog question) went without
+    // the brief, and the answer made up an itsdangerous token the code never had.
+    ctx.resetConversationMemoryForTests();
+    const s = { ...noFetch, sessionId: 'long' };
+    assert.notEqual(await ctx.buildRepoContext('How does checkout with PayPal work in your ProShop project?', [readyProshop], s), '');
+    const long = await ctx.buildRepoContext('And how does the order get marked as paid there? Who sends the payment result to it?', [readyProshop], s);
+    assert.match(long, /^## bradtraversy\/proshop_mern/);
+    assert.match(long, /updateOrderToPaid/);
+  });
+  test('a long question that only points back, about something else, does not carry', async () => {
+    ctx.resetConversationMemoryForTests();
+    const s = { ...noFetch, sessionId: 'other' };
+    await ctx.buildRepoContext('What does addOrderItems do?', [readyProshop], s);
+    assert.equal(await ctx.buildRepoContext('OK, and what is the difference between a process and a thread, and when would you pick one over the other there?', [readyProshop], s), '');
+  });
+  test('a follow-up that misses keeps the repository for the next one', async () => {
+    // The live miss above also erased the repository, so the next question
+    // ("If you had to make that reset flow more secure...") lost it too.
+    ctx.resetConversationMemoryForTests();
+    const s = { ...noFetch, sessionId: 'keep' };
+    await ctx.buildRepoContext('What does addOrderItems do?', [readyProshop], s);
+    assert.equal(await ctx.buildRepoContext('Okay, and if that suddenly had ten times the traffic next month, what would break first in it?', [readyProshop], s), '');
+    assert.match(await ctx.buildRepoContext('How would you fix that?', [readyProshop], s), /^## bradtraversy\/proshop_mern/);
+  });
   test('the caller\'s follow-up verdict counts even without a pointing word', async () => {
     ctx.resetConversationMemoryForTests();
     await ctx.buildRepoContext('What does addOrderItems do?', [readyProshop], { sessionId: 'd' });

@@ -66,6 +66,12 @@ const OTHER_WORK_RE = /\b(job|jobs|company|companies|employer|employers|role|rol
 /** Short and pointing back: "why that way?", "how does it scale?", "and the tests for it?" */
 const POINTS_BACK_RE = /\b(it|that|this|those|these|them|there|then|its)\b/i;
 const FOLLOW_UP_MAX_WORDS = 14;
+/**
+ * A longer question that points back carries the previous repository only when
+ * it shares this many words with one part of that repository's brief ("And how
+ * does password reset work there? How long is the reset link valid for?").
+ */
+const LONG_FOLLOW_UP_MIN_OVERLAP = 2;
 /** A follow-up carries the previous repository for this long. */
 export const FOLLOW_UP_WINDOW_MS = 10 * 60_000;
 const IMPROVE_RE = /\b(improve|improvement|weak|weakness|bug|bugs|problem|problems|issue|issues|challenge|challenges|limitation|limitations|differently|refactor|scale|scaling|tradeoff|trade-off|security|change)\b/i;
@@ -154,6 +160,11 @@ interface RepoMatch {
   namedSymbols: RepoBriefIndexSymbol[];
 }
 
+/** The most question words any one part of this brief shares. */
+function sharedWords(q: Set<string>, b: ReadyBrief): number {
+  return briefUnits(b.result.brief).units.reduce((n, u) => Math.max(n, [...q].filter((t) => u.terms.has(t)).length), 0);
+}
+
 /** Which repositories the question is about, best first. */
 export function matchRepos(question: string, briefs: ReadyBrief[]): RepoMatch[] {
   const q = terms(question);
@@ -193,8 +204,7 @@ export function matchRepos(question: string, briefs: ReadyBrief[]): RepoMatch[] 
   if (!anyNamed) {
     const pastWork = PAST_WORK_RE.test(question);
     for (const m of out) {
-      // The most question words any one part of this brief shares.
-      const best = briefUnits(m.brief.result.brief).units.reduce((n, u) => Math.max(n, [...q].filter((t) => u.terms.has(t)).length), 0);
+      const best = sharedWords(q, m.brief);
       // "Your project" with no name: the only repository, or one whose brief
       // shares enough words. "How did you stop duplicate reviews?" (a follow-up
       // that names nothing): only a strong match, so a question about some other
@@ -236,6 +246,23 @@ export function isFollowUpQuestion(question: string, callerSaysFollowUp = false)
   return words <= FOLLOW_UP_MAX_WORDS && POINTS_BACK_RE.test(question);
 }
 
+/** Points back at the previous turn, and is not about some other job. */
+function pointsBack(question: string): boolean {
+  return POINTS_BACK_RE.test(question) && !OTHER_WORK_RE.test(question);
+}
+
+/**
+ * Too long for isFollowUpQuestion, but pointing back and sharing words with the
+ * previous repository: interviewers ask two-part follow-ups ("And how does
+ * password reset work there? How long is the reset link valid for?"). A long
+ * question that only says "there" about something else does not carry.
+ */
+function isLongFollowUp(question: string, previousBriefs: ReadyBrief[]): boolean {
+  if (!pointsBack(question)) return false;
+  const q = terms(question);
+  return previousBriefs.some((b) => sharedWords(q, b) >= LONG_FOLLOW_UP_MIN_OVERLAP);
+}
+
 export function selectRepoContext(
   question: string,
   briefs: ReadyBrief[],
@@ -250,13 +277,13 @@ export function selectRepoContext(
   // words too, so "it" finds the function the conversation is on.
   let carried = false;
   let rankText = question;
-  if (!matches.length && previous?.keys.length && isFollowUpQuestion(question, callerSaysFollowUp)) {
-    matches = briefs
-      .filter((b) => previous.keys.includes(b.entry.key))
-      .slice(0, 2)
-      .map((brief) => ({ brief, score: 1, namedSymbols: [] }));
-    carried = matches.length > 0;
-    rankText = `${question} ${previous.question}`;
+  if (!matches.length && previous?.keys.length) {
+    const previousBriefs = briefs.filter((b) => previous.keys.includes(b.entry.key)).slice(0, 2);
+    if (previousBriefs.length && (isFollowUpQuestion(question, callerSaysFollowUp) || isLongFollowUp(question, previousBriefs))) {
+      matches = previousBriefs.map((brief) => ({ brief, score: 1, namedSymbols: [] }));
+      carried = true;
+      rankText = `${question} ${previous.question}`;
+    }
   }
   if (!matches.length) return { text: '', matches: [], carried: false };
   const q = terms(rankText);
@@ -333,7 +360,11 @@ export async function buildRepoContext(question: string, briefs: ReadyBrief[], o
   // A carried follow-up keeps the question the repository was named in, so a
   // second "and why?" still knows what "it" is. Anything else (a match, or a
   // question about nothing here) replaces it.
-  if (!carried) rememberTurn(opts.sessionId, matches, question, now);
+  // A question that points back but did not carry ("what would break first in
+  // it?") is still on the same thread, so it keeps the repository for the next
+  // one, without extending its window. One that points nowhere moves on.
+  const stillOnThread = !carried && !matches.length && !!previous && pointsBack(question);
+  if (!carried && !stillOnThread) rememberTurn(opts.sessionId, matches, question, now);
   else if (opts.sessionId) previousBySession.get(opts.sessionId)!.at = now; // a long thread stays on the repository
   if (!text) return '';
   const fetchLines = opts.fetchLines;
