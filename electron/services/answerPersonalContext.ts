@@ -90,6 +90,30 @@ export function personalContextBlockForAnswers(
   }
 }
 
+/**
+ * The user's GitHub repository briefs cut to this question (#781), as ONE block
+ * for the legacy paths (V3 off or failed, the manual answer, typed chat's
+ * fallback). The V3 composer carries the same text as its code_repos section;
+ * this renders it with the same section builder so the wording cannot drift.
+ * Profile data: '' when the "Profile and history" scope is off or unreadable
+ * (fail closed, as for About you). Never throws.
+ */
+export async function codeReposBlockForAnswers(
+  question: string,
+  opts: { sessionId?: string; isFollowUp?: boolean } = {},
+): Promise<string> {
+  try {
+    const scopes = require('../context-intelligence/policies/provider-scope-policy') as typeof import('../context-intelligence/policies/provider-scope-policy');
+    if (scopes.isScopeDenied('profile_history', scopes.readProviderScopePolicy())) return '';
+    const text = await (require('./repoBrief') as typeof import('./repoBrief')).repoContextForQuestion(question, opts);
+    if (!text.trim()) return '';
+    const composer = require('../context-intelligence/generation/prompt-composer') as typeof import('../context-intelligence/generation/prompt-composer');
+    return composer.codeReposSection(text);
+  } catch {
+    return '';
+  }
+}
+
 export function personalContextForAnswers(opts: AnswerPersonalContextOptions = {}): AnswerPersonalContext {
   const out: AnswerPersonalContext = { userBio: '' };
   try {

@@ -120,6 +120,8 @@ interface MeetingOfferPayload {
   autoStartAt: number | null;
 }
 
+type RepoBriefsState = { repos: import('./services/repoBrief/RepoBriefManager').RepoBriefView[]; suggestions: import('./services/repoBrief/githubRepoLinks').RepoSuggestion[]; max: number };
+
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: {
@@ -1205,6 +1207,11 @@ interface ElectronAPI {
   profileDraftOwnAnswers: () => Promise<{ success: boolean; written?: string[]; error?: string }>;
   onProfileOwnAnswersUpdated: (callback: (data: { written: string[] }) => void) => () => void;
   profileGetProfile: () => Promise<any>;
+  repoBriefsList: () => Promise<RepoBriefsState>;
+  repoBriefsAdd: (url: string, projectName?: string) => Promise<({ success: true } & RepoBriefsState) | { success: false; error?: string; proRequired?: boolean }>;
+  repoBriefsRemove: (key: string) => Promise<{ success: boolean } & Partial<RepoBriefsState>>;
+  repoBriefsRefresh: (key: string) => Promise<{ success: boolean; error?: string } & Partial<RepoBriefsState>>;
+  onRepoBriefsUpdated: (callback: (data: RepoBriefsState) => void) => () => void;
   profileGetCompanyDossier: () => Promise<any | null>;
   profileSelectFile: () => Promise<{
     success?: boolean;
@@ -3516,6 +3523,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('profile:own-answers-updated', subscription); };
   },
   profileGetProfile: () => ipcRenderer.invoke('profile:get-profile'),
+  repoBriefsList: () => ipcRenderer.invoke('repo-briefs:list'),
+  repoBriefsAdd: (url: string, projectName?: string) => ipcRenderer.invoke('repo-briefs:add', url, projectName),
+  repoBriefsRemove: (key: string) => ipcRenderer.invoke('repo-briefs:remove', key),
+  repoBriefsRefresh: (key: string) => ipcRenderer.invoke('repo-briefs:refresh', key),
+  onRepoBriefsUpdated: (callback: (data: any) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('repo-briefs:updated', subscription);
+    return () => { ipcRenderer.removeListener('repo-briefs:updated', subscription); };
+  },
   profileGetCompanyDossier: () => ipcRenderer.invoke('profile:get-company-dossier'),
   profileSelectFile: () => ipcRenderer.invoke('profile:select-file'),
 

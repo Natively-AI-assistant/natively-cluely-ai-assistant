@@ -3,12 +3,13 @@ import { failureText } from '../lib/proRefusal.mjs';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
-    User, CheckCircle, ArrowUpRight, ArrowRight, ChevronRight, Paperclip, FileText,
+    User, CheckCircle, ArrowUpRight, ArrowRight, ChevronRight, Paperclip, FileText, FolderGit2,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
 import { RoleInsightPanel } from '../premium';
+import { RepoBriefsSection } from './profile/RepoBriefsCard';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
@@ -1573,6 +1574,8 @@ const NAV_ITEMS = [
     // What the résumé cannot say (a weakness, why they left, a salary range):
     // it completes the profile, so it sits right under it.
     { id: 'answers',     label: 'Cue Cards',          Icon: MessageSquare },
+    // The résumé's GitHub projects, read ahead of the interview (#781).
+    { id: 'repos',       label: 'GitHub Repos',       Icon: FolderGit2 },
     // Role Insight reads the résumé and JD that Profile owns, so it sits
     // directly after it — ahead of the outbound artifacts (Company Intel,
     // Cover Letter) that come later in the user's actual sequence.
@@ -3879,6 +3882,7 @@ export function ProfileIntelligenceSettings({
         identity: renderIdentity,
         insights: renderInsights,
         answers: () => <OwnAnswersSection hasResume={profileStatus.hasProfile} hasAccess={hasProfileAccess} />,
+        repos: () => <RepoBriefsSection hasResume={profileStatus.hasProfile} onGoToIdentity={() => goToSection('identity')} />,
         roleinsight: renderRoleInsight,
         tavily: renderTavily,
         company: renderCompany,

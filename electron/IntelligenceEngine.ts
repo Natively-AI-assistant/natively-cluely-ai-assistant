@@ -9121,7 +9121,9 @@ export class IntelligenceEngine extends EventEmitter {
                     answerType: answerPlan.answerType,
                     modeId: (activeModeInfo as any)?.id ?? null,
                 });
-                const context = [transcriptContext, personalBlock].filter(Boolean).join('\n\n') || undefined;
+                // The user's repositories (#781), which the V3 composer carries as code_repos.
+                const codeReposBlock = await (require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).codeReposBlockForAnswers(question || '');
+                const context = [transcriptContext, personalBlock, codeReposBlock].filter(Boolean).join('\n\n') || undefined;
                 answer = await this.answerLLM.generate(question, context, answerPlan, undefined, manualDiagramTurn);
             }
             const _manualSignals = require('./llm/codingPromptSignals').resolveCodingPromptSignals({

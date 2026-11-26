@@ -27,7 +27,7 @@ export function proRefusal<T extends Record<string, unknown> = Record<string, ne
 }
 
 /** Channel prefixes whose handlers are Pro features or sit right beside them. */
-export const PRO_IPC_PREFIXES = ['profile:', 'knowledge:', 'modes:', 'roleInsight:', 'live-notes:', 'user-bio-'] as const;
+export const PRO_IPC_PREFIXES = ['profile:', 'knowledge:', 'modes:', 'roleInsight:', 'live-notes:', 'user-bio-', 'repo-briefs:'] as const;
 
 /**
  * Pro or trial. Each handler checks isProOrTrialActive() itself (some only for
@@ -36,6 +36,9 @@ export const PRO_IPC_PREFIXES = ['profile:', 'knowledge:', 'modes:', 'roleInsigh
  */
 export const PRO_IPC_CHANNELS: readonly string[] = [
   // Profile Intelligence
+  // GitHub repositories (#781): starting a build costs a server build
+  'repo-briefs:add',
+  'repo-briefs:refresh',
   'profile:upload-resume',
   'profile:upload-jd',
   'profile:set-mode', // switching on
@@ -91,6 +94,9 @@ export const PRO_CHANNELS_REFUSING_OTHERWISE: Readonly<Record<string, string>> =
 
 /** Under a Pro prefix, free on purpose: reading, deleting, cancelling, the notepad itself. */
 export const FREE_IPC_CHANNELS: readonly string[] = [
+  // Seeing and removing your own repositories never needs Pro.
+  'repo-briefs:list',
+  'repo-briefs:remove',
   'profile:delete',
   'profile:delete-jd',
   'profile:get-company-dossier',

@@ -173,6 +173,12 @@ export interface BridgeInput {
   modeNotes?: string;
   /** "Use in every answer" skills (SkillsManager.getAlwaysOnPromptBlock). See ComposeInput.standingSkills. */
   standingSkills?: string;
+  /**
+   * The user's GitHub repository briefs, cut to this question (#781,
+   * services/repoBrief). Undefined: read here from the question. '' sends none.
+   * Profile data: it leaves with the profile_history scope or not at all.
+   */
+  codeRepos?: string;
   /** The APP's per-turn length default — see ComposeInput.defaultLengthDirective. Never concatenate it onto realtimeInstruction. */
   defaultLengthDirective?: string;
   /**
@@ -296,6 +302,15 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     if (!isContextIntelligenceV3Enabled()) return null;
     const question = String(input.question || '').trim();
     if (!question) return null;
+    // Started now so the GitHub read for exact lines (≤1.5 s) overlaps retrieval.
+    const codeReposPromise: Promise<string> = input.codeRepos !== undefined
+      ? Promise.resolve(input.codeRepos)
+      : (require('../../services/repoBrief') as typeof import('../../services/repoBrief')).repoContextForQuestion(question, {
+        // "Why did you do it that way?" names nothing: the repository the
+        // previous question in this conversation was about carries over.
+        sessionId: input.scope?.sessionId,
+        isFollowUp: input.isFollowUp === true,
+      }).catch(() => '');
 
     const raw = input.modeTemplateType ?? 'general';
     const modeId: ModeId = isModeId(raw) ? raw : 'general';
@@ -606,6 +621,9 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     const userBioText = input.userBio?.trim() ?? '';
     const userBio = userBioText && !isScopeDenied('profile_history', scopePolicy) ? userBioText : undefined;
     if (userBioText && !userBio) auditWithheldScopes.add('profile_history');
+    const codeReposText = (await codeReposPromise).trim();
+    const codeRepos = codeReposText && !isScopeDenied('profile_history', scopePolicy) ? codeReposText : undefined;
+    if (codeReposText && !codeRepos) auditWithheldScopes.add('profile_history');
 
     // Persona resolution must never break a turn: a throwing factory or a null
     // return simply composes without one (today's behaviour).
@@ -640,6 +658,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       userBio,
       modeNotes: input.modeNotes,
       standingSkills: input.standingSkills,
+      codeRepos,
       diagramTurn,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
@@ -672,6 +691,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     if (convoSummary) packedDataScopes.add('transcript');
     if (diagramDesignAllowed) packedDataScopes.add('transcript');
     if (userBio) packedDataScopes.add('profile_history');
+    if (codeRepos) packedDataScopes.add('profile_history');
     // Declared separately from `transcript`: an audit that asks "did screen
     // content leave the device this turn?" must not have to know that screen
     // text is smuggled inside the conversation summary.

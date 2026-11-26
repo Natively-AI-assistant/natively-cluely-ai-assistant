@@ -5581,6 +5581,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           });
           // AFTER the rest: an over-budget context is trimmed from its head.
           if (personalBlock) context = context ? `${context}\n\n${personalBlock}` : personalBlock;
+          // The user's repositories (#781), which the V3 composer carries as code_repos.
+          const codeReposBlock = await (require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).codeReposBlockForAnswers(message);
+          if (codeReposBlock) context = context ? `${context}\n\n${codeReposBlock}` : codeReposBlock;
         }
         const legacyWebSearchBlock = await webSearchBlockPromise;
         if (legacyWebSearchBlock) {
@@ -20159,6 +20162,70 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       return null;
     }
+  });
+
+  // ── GitHub repositories (#781, services/repoBrief) ──────────────────────
+  // Up to five public repositories, offered from the résumé's project links or
+  // pasted. The Natively API reads each one and writes an interview brief; the
+  // brief is kept on this device and read by answers about that code.
+  const repoBriefs = () => {
+    const mod = require('./services/repoBrief') as typeof import('./services/repoBrief');
+    return mod.peekRepoBriefManager()
+      ?? mod.initRepoBriefs(() => appState.getKnowledgeOrchestrator()?.getProfileData?.() ?? null);
+  };
+  let repoBriefsBroadcasting = false;
+  const repoBriefsView = () => {
+    const m = repoBriefs();
+    if (!repoBriefsBroadcasting) {
+      repoBriefsBroadcasting = true;
+      m.on('changed', () => {
+        const view = repoBriefsView();
+        BrowserWindow.getAllWindows().forEach((win) => {
+          try { if (!win.isDestroyed()) win.webContents.send('repo-briefs:updated', view); } catch { /* window gone */ }
+        });
+      });
+    }
+    const { suggestReposFromResume, MAX_REPOS } = require('./services/repoBrief/githubRepoLinks') as typeof import('./services/repoBrief/githubRepoLinks');
+    let profile: any = null;
+    try { profile = appState.getKnowledgeOrchestrator()?.getProfileData?.() ?? null; } catch { /* no résumé */ }
+    const repos = m.list();
+    const added = new Set(repos.map((r) => r.key));
+    const suggestions = suggestReposFromResume(profile, null, 20)
+      .filter((s) => !added.has(`${s.owner}/${s.repo}`.toLowerCase()))
+      .slice(0, MAX_REPOS);
+    return { repos, suggestions, max: MAX_REPOS };
+  };
+
+  safeHandle('repo-briefs:list', async () => {
+    try { return repoBriefsView(); } catch (error: any) {
+      console.error('[IPC] repo-briefs:list failed:', error?.message);
+      return { repos: [], suggestions: [], max: 5 };
+    }
+  });
+
+  safeHandle('repo-briefs:add', async (_, url: unknown, projectName?: unknown) => {
+    if (!isProOrTrialActive()) {
+      return proRefusal('Repository briefs are part of Natively Pro.');
+    }
+    if (typeof url !== 'string' || url.length > 500) return { success: false, error: 'Expected a link like github.com/owner/repo' };
+    const name = typeof projectName === 'string' ? projectName : undefined;
+    const res = repoBriefs().add(url, { projectName: name });
+    return res.ok ? { success: true, ...repoBriefsView() } : { success: false, error: res.error };
+  });
+
+  safeHandle('repo-briefs:remove', async (_, key: unknown) => {
+    if (typeof key !== 'string') return { success: false };
+    const ok = repoBriefs().remove(key);
+    return { success: ok, ...repoBriefsView() };
+  });
+
+  safeHandle('repo-briefs:refresh', async (_, key: unknown) => {
+    if (!isProOrTrialActive()) {
+      return proRefusal('Repository briefs are part of Natively Pro.');
+    }
+    if (typeof key !== 'string') return { success: false };
+    const ok = repoBriefs().refresh(key);
+    return { success: ok, ...repoBriefsView() };
   });
 
   // Standalone dossier hydration — reads the cached company-research dossier

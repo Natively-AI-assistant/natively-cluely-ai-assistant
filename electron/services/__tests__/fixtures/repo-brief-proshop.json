@@ -1,0 +1,2186 @@
+{
+ "repo": {
+  "owner": "bradtraversy",
+  "name": "proshop_mern",
+  "sha": "1d20b5b09e796e2f00779306c390360e9e573276",
+  "url": "https://github.com/bradtraversy/proshop_mern",
+  "description": "Shopping cart built with MERN & Redux",
+  "fork": false,
+  "parent": null
+ },
+ "tier": "small",
+ "coverage": {
+  "treeEntries": 104,
+  "truncated": false,
+  "codeFiles": 61,
+  "codeBytes": 140129,
+  "selectedFiles": 64,
+  "selectedBytes": 145691,
+  "ownFiles": 0,
+  "skipped": {
+   "not_source": 19,
+   "generated": 3
+  },
+  "fetchedFiles": 64,
+  "failedFiles": 0
+ },
+ "brief": "## Overview\n- Full-stack MERN e-commerce application (MongoDB, Express, React, Node.js) with Redux state management [package.json:2-17, frontend/package.json:6-18].\n- Backend is an Express 4 REST API written with native ES Modules (`\"type\": \"module\"`) backed by Mongoose 5 [package.json:4,14,17, backend/server.js:1-18].\n- Frontend is a single-page React 16 app built with React-Bootstrap, React Router v5, and standard Redux with `redux-thunk` middleware [frontend/package.json:6-18, frontend/src/store.js:76-82].\n- Auth uses JSON Web Tokens (JWT) sent via HTTP `Authorization: Bearer <token>` headers and stored in client `localStorage` [backend/middleware/authMiddleware.js:8-25, frontend/src/actions/userActions.js:53, backend/utils/generateToken.js:3-7].\n- Integrated with PayPal SDK v2 for order checkout and Multer for local product image uploads [frontend/src/screens/OrderScreen.js:54-64, backend/routes/uploadRoutes.js:6-35].\n\n---\n\n## Key Flows\n\n### User Registration and Authentication\n1. User submits name, email, and password from `RegisterScreen.submitHandler` [frontend/src/screens/RegisterScreen.js:30-37].\n2. Dispatches `register` action which makes `POST /api/users` [frontend/src/actions/userActions.js:77-93].\n3. Backend route invokes `registerUser`, checks if user exists, and persists a new `User` document [backend/routes/userRoutes.js:15, backend/controllers/userController.js:30-44].\n4. `userSchema.pre('save')` generates a salt and hashes password with `bcryptjs` before persisting [backend/models/userModel.js:34-41].\n5. Backend issues JWT via `generateToken(user._id)` with 30-day expiry [backend/controllers/userController.js:52, backend/utils/generateToken.js:3-7].\n6. Frontend receives payload, dispatches `USER_REGISTER_SUCCESS` and `USER_LOGIN_SUCCESS`, and writes user credentials to `localStorage.setItem('userInfo')` [frontend/src/actions/userActions.js:95-105].\n\n### Product Search and Pagination\n1. User enters text in `SearchBox.submitHandler`, triggering `history.push('/search/:keyword')` [frontend/src/components/SearchBox.js:7-14].\n2. `HomeScreen` lifecycle evaluates keyword/pageNumber params and dispatches `listProducts(keyword, pageNumber)` [frontend/src/screens/HomeScreen.js:13-25].\n3. Action sends `GET /api/products?keyword=${keyword}&pageNumber=${pageNumber}` [frontend/src/actions/productActions.js:33-35].\n4. Route handler `getProducts` runs regex search `Product.find({ name: { $regex, $options: 'i' } })`, limits to 10 products, skips by page offset, and counts matches via `countDocuments` [backend/routes/productRoutes.js:14, backend/controllers/productController.js:7-25].\n5. Reducer updates `productList` state with products, page index, and page count [frontend/src/reducers/productReducers.js:33-38], rendered with `Paginate` [frontend/src/components/Paginate.js:5-26].\n\n### Checkout and Order Creation\n1. Items in cart proceed through `ShippingScreen.submitHandler` -> `saveShippingAddress` [frontend/src/screens/ShippingScreen.js:19-23, frontend/src/actions/cartActions.js:36-43] and `PaymentScreen.submitHandler` -> `savePaymentMethod` [frontend/src/screens/PaymentScreen.js:20-24, frontend/src/actions/cartActions.js:45-52].\n2. In `PlaceOrderScreen.placeOrderHandler`, frontend computes price sub-totals and dispatches `createOrder` [frontend/src/screens/PlaceOrderScreen.js:49-61].\n3. `createOrder` attaches `Bearer` token to headers and executes `POST /api/orders` [frontend/src/actions/orderActions.js:35-43].\n4. Express route runs through `protect` middleware to decode JWT, verify payload, and attach `req.user` [backend/routes/orderRoutes.js:13, backend/middleware/authMiddleware.js:5-25].\n5. `addOrderItems` validates `orderItems.length !== 0`, constructs a new `Order` model, and saves to MongoDB [backend/controllers/orderController.js:7-36].\n6. On success, `createOrder` clears Redux cart state via `CART_CLEAR_ITEMS` and purges client storage with `localStorage.removeItem('cartItems')` [frontend/src/actions/orderActions.js:48-52].\n\n### Order Payment via PayPal\n1. `OrderScreen` checks if order is unpaid; loads PayPal client script dynamically via `addPayPalScript` fetching `/api/config/paypal` [frontend/src/screens/OrderScreen.js:54-64,70-76].\n2. User approves PayPal transaction on `<PayPalButton />`, triggering `OrderScreen.successPaymentHandler` [frontend/src/screens/OrderScreen.js:79-82,204-208].\n3. Dispatches `payOrder(orderId, paymentResult)` sending `PUT /api/orders/:id/pay` with auth token [frontend/src/actions/orderActions.js:105-129].\n4. Backend `updateOrderToPaid` finds order by ID, sets `isPaid = true`, `paidAt = Date.now()`, maps `paymentResult` details, and executes `order.save()` [backend/controllers/orderController.js:60-75].\n5. Backend returns updated order; frontend dispatches `ORDER_PAY_SUCCESS`, which re-triggers order detail reload in `useEffect` [frontend/src/reducers/orderReducers.js:81-85, frontend/src/screens/OrderScreen.js:66-77].\n\n---\n\n## Functions\n\n- `connectDB` [backend/config/db.js:3-16]: Connects Mongoose to MongoDB using connection string in `process.env.MONGO_URI`; exits process on failure with code 1.\n- `addOrderItems` [backend/controllers/orderController.js:7-38]: Creates order record for authenticated user; checks for non-empty items and sets HTTP 400 if empty.\n- `getOrderById` [backend/controllers/orderController.js:43-55]: Returns order by route ID; populates associated user's name and email fields.\n- `updateOrderToPaid` [backend/controllers/orderController.js:60-80]: Marks order as paid; saves payment ID, status, update_time, and payer email from payment gateway response.\n- `updateOrderToDelivered` [backend/controllers/orderController.js:85-99]: Admin-only update setting `isDelivered` to true and timestamping `deliveredAt`.\n- `getMyOrders` [backend/controllers/orderController.js:104-107]: Returns all orders matching logged-in user ID (`{ user: req.user._id }`).\n- `getOrders` [backend/controllers/orderController.js:112-115]: Admin-only query returning all orders across all users with populated user id and name.\n- `getProducts` [backend/controllers/productController.js:7-26]: Queries paginated products (10 per page) with optional case-insensitive regex keyword matching on name.\n- `getProductById` [backend/controllers/productController.js:31-40]: Finds product by MongoDB `_id`; throws 404 error if not found.\n- `deleteProduct` [backend/controllers/productController.js:45-55]: Finds product by ID and removes document via `product.remove()`.\n- `createProduct` [backend/controllers/productController.js:60-75]: Creates a placeholder product assigned to current admin user so it can subsequently be edited.\n- `updateProduct` [backend/controllers/productController.js:80-108]: Replaces product fields with request body values (name, price, image, brand, category, description, countInStock).\n- `createProductReview` [backend/controllers/productController.js:113-149]: Appends user review, guards against duplicate reviews per user, and recalculates running average rating.\n- `getTopProducts` [backend/controllers/productController.js:154-158]: Returns top 3 products sorted descending by rating (`sort({ rating: -1 })`).\n- `authUser` [backend/controllers/userController.js:8-25]: Verifies user email and bcrypt password; returns token and user data or throws 401.\n- `registerUser` [backend/controllers/userController.js:30-58]: Validates uniqueness of email, creates User document, and returns profile with signed JWT.\n- `getUserProfile` [backend/controllers/userController.js:63-77]: Fetches authenticated user's profile based on `req.user._id`.\n- `updateUserProfile` [backend/controllers/userController.js:82-105]: Updates profile fields; checks if password is provided before setting it so hash middleware runs.\n- `getUsers` [backend/controllers/userController.js:110-113]: Returns all user records for admin views.\n- `deleteUser` [backend/controllers/userController.js:118-128]: Removes user record by ID; throws 404 if user not found.\n- `getUserById` [backend/controllers/userController.js:133-142]: Admin endpoint retrieving a single user document excluding the password field (`select('-password')`).\n- `updateUser` [backend/controllers/userController.js:147-167]: Updates user profile and `isAdmin` flag by ID via admin panel.\n- `protect` [backend/middleware/authMiddleware.js:5-31]: Parses Bearer token from authorization header, verifies token via `jwt.verify`, and populates `req.user`.\n- `admin` [backend/middleware/authMiddleware.js:33-40]: Authorization guard ensuring `req.user && req.user.isAdmin`.\n- `errorHandler` [backend/middleware/errorMiddleware.js:7-14]: Custom Express error handler formatting error response to JSON and suppressing stack trace in production.\n- `generateToken` [backend/utils/generateToken.js:3-7]: Generates JWT signed with `process.env.JWT_SECRET` and set to expire in 30 days.\n- `addToCart` [frontend/src/actions/cartActions.js:9-25]: Thunk action requesting product data by ID and persisting updated cart array in `localStorage`.\n- `login` [frontend/src/actions/userActions.js:30-63]: Calls `POST /api/users/login`, stores user profile and token in Redux and `localStorage`.\n- `logout` [frontend/src/actions/userActions.js:65-75]: Clears cart, user, shipping, and order info from `localStorage`, resets reducers, and redirects to `/login`.\n- `createOrder` [frontend/src/actions/orderActions.js:25-66]: Dispatches order creation API call, auto-logs out if token expired, and purges cart items upon success.\n- `payOrder` [frontend/src/actions/orderActions.js:105-148]: Sends PayPal payment results to backend order pay route.\n- `deliverOrder` [frontend/src/actions/orderActions.js:150-189]: Sends PUT request to order delivery endpoint under admin credentials.\n- `listProducts` [frontend/src/actions/productActions.js:27-50]: Queries backend with keyword and page number; updates product list state.\n- `updateProduct` [frontend/src/actions/productActions.js:146-187]: Sends PUT request to update product data and cascades updated product into `productDetails` reducer.\n- `uploadFileHandler` [frontend/src/screens/ProductEditScreen.js:55-76]: Builds `FormData` containing selected image file and uploads via `POST /api/upload`.\n\n---\n\n## API Routes\n\n| Method | Path | Handler | Description |\n|---|---|---|---|\n| `GET` | `/api/products` | `getProducts` [backend/routes/productRoutes.js:14] | Returns paginated list of products matching optional keyword. |\n| `POST` | `/api/products` | `protect, admin, createProduct` [backend/routes/productRoutes.js:14] | Creates a placeholder product entry (Admin only). |\n| `GET` | `/api/products/top` | `getTopProducts` [backend/routes/productRoutes.js:16] | Returns top 3 rated products. |\n| `GET` | `/api/products/:id` | `getProductById` [backend/routes/productRoutes.js:18-19] | Fetches single product details by MongoDB `_id`. |\n| `DELETE` | `/api/products/:id` | `protect, admin, deleteProduct` [backend/routes/productRoutes.js:18-20] | Deletes product by ID (Admin only). |\n| `PUT` | `/api/products/:id` | `protect, admin, updateProduct` [backend/routes/productRoutes.js:18-21] | Updates product details by ID (Admin only). |\n| `POST` | `/api/products/:id/reviews` | `protect, createProductReview` [backend/routes/productRoutes.js:15] | Adds a rating and comment to a product. |\n| `POST` | `/api/users` | `registerUser` [backend/routes/userRoutes.js:15] | Registers a new user and returns user info with token. |\n| `GET` | `/api/users` | `protect, admin, getUsers` [backend/routes/userRoutes.js:15] | Fetches all users (Admin only). |\n| `POST` | `/api/users/login` | `authUser` [backend/routes/userRoutes.js:16] | Validates email/password and returns JWT. |\n| `GET` | `/api/users/profile` | `protect, getUserProfile` [backend/routes/userRoutes.js:17-19] | Gets current authenticated user profile. |\n| `PUT` | `/api/users/profile` | `protect, updateUserProfile` [backend/routes/userRoutes.js:17-20] | Updates current user's profile info and password. |\n| `GET` | `/api/users/:id` | `protect, admin, getUserById` [backend/routes/userRoutes.js:22-24] | Retrieves specific user by ID (Admin only). |\n| `PUT` | `/api/users/:id` | `protect, admin, updateUser` [backend/routes/userRoutes.js:22-25] | Updates specific user by ID (Admin only). |\n| `DELETE` | `/api/users/:id` | `protect, admin, deleteUser` [backend/routes/userRoutes.js:22-23] | Deletes specific user by ID (Admin only). |\n| `POST` | `/api/orders` | `protect, addOrderItems` [backend/routes/orderRoutes.js:13] | Creates new order with items and addresses. |\n| `GET` | `/api/orders` | `protect, admin, getOrders` [backend/routes/orderRoutes.js:13] | Retrieves all orders (Admin only). |\n| `GET` | `/api/orders/myorders` | `protect, getMyOrders` [backend/routes/orderRoutes.js:14] | Returns all orders belonging to authenticated user. |\n| `GET` | `/api/orders/:id` | `protect, getOrderById` [backend/routes/orderRoutes.js:15] | Gets order details by ID with populated user info. |\n| `PUT` | `/api/orders/:id/pay` | `protect, updateOrderToPaid` [backend/routes/orderRoutes.js:16] | Updates order status to paid with payment gateway metadata. |\n| `PUT` | `/api/orders/:id/deliver` | `protect, admin, updateOrderToDelivered` [backend/routes/orderRoutes.js:17] | Updates order status to delivered (Admin only). |\n| `POST` | `/api/upload` | Multer middleware inline handler [backend/routes/uploadRoutes.js:37-39] | Uploads single image file to server `uploads/` folder. |\n| `GET` | `/api/config/paypal` | Inline handler [backend/server.js:31-33] | Returns PayPal Client ID string from environment variables. |\n\n---\n\n## Data Model\n\n### `User` (`backend/models/userModel.js`)\n- `name` (String, required) [backend/models/userModel.js:7-9]\n- `email` (String, required, unique) [backend/models/userModel.js:10-14]\n- `password` (String, required) [backend/models/userModel.js:15-18]\n- `isAdmin` (Boolean, required, default: false) [backend/models/userModel.js:19-23]\n- Mongoose timestamps (`createdAt`, `updatedAt`) [backend/models/userModel.js:26]\n- Schema Methods: `matchPassword(enteredPassword)` [backend/models/userModel.js:30-32]\n- Pre-save Hook: Hashes password with `bcrypt.hash` if modified [backend/models/userModel.js:34-41]\n\n### `Product` (`backend/models/productModel.js`)\n- `user` (ObjectId ref `'User'`, required) [backend/models/productModel.js:21-25]\n- `name` (String, required) [backend/models/productModel.js:26-29]\n- `image` (String, required) [backend/models/productModel.js:30-33]\n- `brand` (String, required) [backend/models/productModel.js:34-37]\n- `category` (String, required) [backend/models/productModel.js:38-41]\n- `description` (String, required) [backend/models/productModel.js:42-45]\n- `reviews` (Array of subdocuments `reviewSchema`) [backend/models/productModel.js:46]\n  - Subdocument fields: `name` (String), `rating` (Number), `comment` (String), `user` (ObjectId ref `'User'`), timestamps [backend/models/productModel.js:3-16]\n- `rating` (Number, required, default: 0) [backend/models/productModel.js:47-51]\n- `numReviews` (Number, required, default: 0) [backend/models/productModel.js:52-56]\n- `price` (Number, required, default: 0) [backend/models/productModel.js:57-61]\n- `countInStock` (Number, required, default: 0) [backend/models/productModel.js:62-66]\n- Mongoose timestamps (`createdAt`, `updatedAt`) [backend/models/productModel.js:69]\n\n### `Order` (`backend/models/orderModel.js`)\n- `user` (ObjectId ref `'User'`, required) [backend/models/orderModel.js:5-9]\n- `orderItems` (Array of objects: `name`, `qty`, `image`, `price`, `product` ObjectId ref `'Product'`) [backend/models/orderModel.js:10-22]\n- `shippingAddress` (Embedded object: `address`, `city`, `postalCode`, `country`) [backend/models/orderModel.js:23-28]\n- `paymentMethod` (String, required) [backend/models/orderModel.js:29-32]\n- `paymentResult` (Object: `id`, `status`, `update_time`, `email_address`) [backend/models/orderModel.js:33-38]\n- `taxPrice` (Number, required, default: 0.0) [backend/models/orderModel.js:39-43]\n- `shippingPrice` (Number, required, default: 0.0) [backend/models/orderModel.js:44-48]\n- `totalPrice` (Number, required, default: 0.0) [backend/models/orderModel.js:49-53]\n- `isPaid` (Boolean, required, default: false) [backend/models/orderModel.js:54-58]\n- `paidAt` (Date) [backend/models/orderModel.js:59-61]\n- `isDelivered` (Boolean, required, default: false) [backend/models/orderModel.js:62-66]\n- `deliveredAt` (Date) [backend/models/orderModel.js:67-69]\n- Mongoose timestamps (`createdAt`, `updatedAt`) [backend/models/orderModel.js:72]\n\n---\n\n## Likely Interview Questions\n\n### 1. How does the application handle authentication and session persistence?\n\"I implemented JWT-based stateless authentication where the backend signs tokens containing user IDs with a 30-day expiration in `generateToken` [backend/utils/generateToken.js:3-7]. When logging in or registering, the token and user profile are sent to the client and stored in `localStorage` [frontend/src/actions/userActions.js:53, backend/controllers/userController.js:14-20]. On application boot, the token is pulled from `localStorage` into Redux's initial state and attached to outgoing requests in the `Authorization: Bearer <token>` header [frontend/src/store.js:60-74, backend/middleware/authMiddleware.js:8-17].\"\n\n### 2. How did you structure route authorization for admin vs standard users?\n\"I wrote two Express middlewares: `protect` and `admin` [backend/middleware/authMiddleware.js:5-40]. `protect` validates the JWT using `jwt.verify` and attaches the user document to `req.user` with password excluded [backend/middleware/authMiddleware.js:15-17]. The `admin` middleware checks `req.user.isAdmin` and passes execution forward via `next()` or throws a 401 'Not authorized as an admin' [backend/middleware/authMiddleware.js:33-40].\"\n\n### 3. How does client-side state stay in sync when an authenticated session expires?\n\"Throughout the Redux actions, I check whether the API response error message equals `'Not authorized, token failed'` [frontend/src/actions/orderActions.js:58-60, frontend/src/actions/userActions.js:144-146]. If detected, it dispatches the `logout()` action, which wipes `localStorage` entries for `userInfo`, `cartItems`, `shippingAddress`, and `paymentMethod`, resets key reducers, and redirects to `/login` [frontend/src/actions/userActions.js:65-75].\"\n\n### 4. How did you implement product reviews to prevent spam or duplicate feedback?\n\"In `createProductReview`, I inspect `product.reviews` to check if a review with `r.user.toString() === req.user._id.toString()` already exists [backend/controllers/productController.js:119-126]. If true, it returns a 400 'Product already reviewed'. Otherwise, it pushes the new review subdocument, recalculates `product.numReviews`, and derives the new average `product.rating` using `Array.prototype.reduce` [backend/controllers/productController.js:135-143].\"\n\n### 5. How are product image uploads handled on the backend?\n\"I used `multer` with a disk storage engine in `uploadRoutes.js` that places files in an `uploads/` directory with a timestamped filename to prevent naming collisions [backend/routes/uploadRoutes.js:6-16]. A regex file filter restricts files strictly to `.jpg`, `.jpeg`, and `.png` extensions and matching MIME types [backend/routes/uploadRoutes.js:18-28]. The route sends back the file path which is stored in component state and saved to the product document [backend/routes/uploadRoutes.js:37-39, frontend/src/screens/ProductEditScreen.js:68-71].\"\n\n### 6. How does search and pagination work together in the catalog?\n\"The `getProducts` controller accepts query params `keyword` and `pageNumber` [backend/controllers/productController.js:7-10]. If a keyword exists, it builds a MongoDB regex query `{ name: { $regex: req.query.keyword, $options: 'i' } }`, applies pagination with `.limit(10).skip(10 * (page - 1))`, and calculates total pages using `Math.ceil(count / pageSize)` [backend/controllers/productController.js:11-26]. The frontend `Paginate` component builds dynamic routes that retain the keyword filter across pages .\"\n\n### 7. How does the PayPal integration function on the frontend?\n\"In `OrderScreen`, if an order is unpaid, the app checks if `window.paypal` exists; if not, it queries `/api/config/paypal` for the client ID and injects the official PayPal SDK `<script>` into the document body [frontend/src/screens/OrderScreen.js:54-76]. Once `sdkReady` is true, `<PayPalButton />` renders; on user completion, `onSuccess` triggers `payOrder`, which sends payment gateway transaction details to `/api/orders/:id/pay` [frontend/src/screens/OrderScreen.js:79-82,204-208].\"\n\n### 8. How did you structure password security in Mongoose?\n\"I added a Mongoose `pre('save')` hook to `userSchema` that tests `this.isModified('password')` before proceeding [backend/models/userModel.js:34-41]. If the password was modified, it generates a salt with 10 rounds and hashes the plain-text password using `bcrypt.hash` before storing it in the database [backend/models/userModel.js:39-40]. For login checks, I added an instance method `matchPassword` that wraps `bcrypt.compare` [backend/models/userModel.js:30-32].\"\n\n### 9. Why does the Admin product creation button create a sample product before editing?\n\"In `ProductListScreen`, clicking 'Create Product' calls `createProduct` without form parameters, which hits `POST /api/products` and writes a placeholder product with dummy attributes to MongoDB [frontend/src/screens/ProductListScreen.js:69-71, backend/controllers/productController.js:60-75]. The created product ID is returned to the frontend, which detects `successCreate` in `useEffect` and immediately navigates the admin to `/admin/product/:id/edit` to populate the real details [frontend/src/screens/ProductListScreen.js:48-50].\"\n\n### 10. How does the Redux cart maintain state across page reloads?\n\"The cart action thunks use Redux `getState()` after dispatching an update to retrieve the latest `cartItems` and store them in `localStorage.setItem('cartItems', JSON.stringify(...))` [frontend/src/actions/cartActions.js:24,33]. During Redux initialization in `store.js`, `cartItemsFromStorage` is parsed from `localStorage` and passed as the `cart.cartItems` slice inside `initialState` [frontend/src/store.js:56-74].\"\n\n---\n\n## Weak Spots / What I'd Improve\n\n1. **Client-trusted order calculations and pricing**: Order item prices, shipping price, tax price, and total price are calculated on the frontend and submitted directly to `POST /api/orders` where the backend stores them without re-querying product database prices [frontend/src/screens/PlaceOrderScreen.js:27-35, backend/controllers/orderController.js:12-34]. An attacker can tamper with prices sent in the HTTP payload.\n2. **Missing authorization check on `getOrderById`**: `getOrderById` requires authentication (`protect`), but does not verify whether `req.user._id` matches `order.user` or if the user is an admin [backend/controllers/orderController.js:43-55, backend/routes/orderRoutes.js:15]. Any logged-in user who guesses an order ID can view another user's order details and shipping address.\n3. **Hard redirection with `document.location.href` in logout**: `logout` triggers a full browser reload using `document.location.href = '/login'` instead of routing via React Router history [frontend/src/actions/userActions.js:74]. This flushes in-memory React state and causes an unnecessary page refresh.\n4. **Hardcoded and dead code in checkout screens**: `PaymentScreen.js` has the Stripe radio button commented out and hardcodes `checked` on the PayPal radio button without dynamic evaluation [frontend/src/screens/PaymentScreen.js:40,43-50]. Similarly, in `OrderScreen.js`, `itemsPrice` is recalculated during every render when `!loading` directly mutating the Redux `order` object [frontend/src/screens/OrderScreen.js:38-47].\n5. **No database transaction when ordering**: When an order is placed, `countInStock` in the `Product` collection is never decremented [backend/controllers/orderController.js:23-36]. Users can order items that are out of stock, and concurrent orders can oversell inventory.\n6. **Local disk storage for uploaded files without cleanup**: Image uploads are saved directly to the local server disk in `uploads/` [backend/routes/uploadRoutes.js:7-9,36]. If a product is updated or deleted via `deleteProduct`, orphaned image files are never cleaned up or removed from disk [backend/controllers/productController.js:45-55].",
+ "index": {
+  "files": [
+   {
+    "path": "backend/config/db.js",
+    "lines": 19,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/controllers/orderController.js",
+    "lines": 125,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/controllers/productController.js",
+    "lines": 169,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/controllers/userController.js",
+    "lines": 179,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/data/products.js",
+    "lines": 77,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/data/users.js",
+    "lines": 23,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/middleware/authMiddleware.js",
+    "lines": 43,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/middleware/errorMiddleware.js",
+    "lines": 17,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/models/orderModel.js",
+    "lines": 79,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/models/productModel.js",
+    "lines": 76,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/models/userModel.js",
+    "lines": 46,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/routes/orderRoutes.js",
+    "lines": 20,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/routes/productRoutes.js",
+    "lines": 24,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/routes/uploadRoutes.js",
+    "lines": 42,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/routes/userRoutes.js",
+    "lines": 28,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/seeder.js",
+    "lines": 58,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/server.js",
+    "lines": 61,
+    "language": "javascript"
+   },
+   {
+    "path": "backend/utils/generateToken.js",
+    "lines": 10,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/actions/cartActions.js",
+    "lines": 53,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/actions/orderActions.js",
+    "lines": 264,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/actions/productActions.js",
+    "lines": 249,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/actions/userActions.js",
+    "lines": 306,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/App.js",
+    "lines": 67,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/CheckoutSteps.js",
+    "lines": 52,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Footer.js",
+    "lines": 17,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/FormContainer.js",
+    "lines": 17,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Header.js",
+    "lines": 73,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Loader.js",
+    "lines": 22,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Message.js",
+    "lines": 13,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Meta.js",
+    "lines": 21,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Paginate.js",
+    "lines": 29,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Product.js",
+    "lines": 34,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/ProductCarousel.js",
+    "lines": 42,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/Rating.js",
+    "lines": 76,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/components/SearchBox.js",
+    "lines": 33,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/constants/cartConstants.js",
+    "lines": 6,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/constants/orderConstants.js",
+    "lines": 28,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/constants/productConstants.js",
+    "lines": 31,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/constants/userConstants.js",
+    "lines": 33,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/index.js",
+    "lines": 21,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/reducers/cartReducers.js",
+    "lines": 56,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/reducers/orderReducers.js",
+    "lines": 164,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/reducers/productReducers.js",
+    "lines": 132,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/reducers/userReducers.js",
+    "lines": 134,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/CartScreen.js",
+    "lines": 115,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/HomeScreen.js",
+    "lines": 63,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/LoginScreen.js",
+    "lines": 76,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/OrderListScreen.js",
+    "lines": 84,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/OrderScreen.js",
+    "lines": 235,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/PaymentScreen.js",
+    "lines": 63,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/PlaceOrderScreen.js",
+    "lines": 170,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/ProductEditScreen.js",
+    "lines": 197,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/ProductListScreen.js",
+    "lines": 140,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/ProductScreen.js",
+    "lines": 225,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/ProfileScreen.js",
+    "lines": 171,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/RegisterScreen.js",
+    "lines": 104,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/ShippingScreen.js",
+    "lines": 83,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/UserEditScreen.js",
+    "lines": 105,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/screens/UserListScreen.js",
+    "lines": 92,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/serviceWorker.js",
+    "lines": 142,
+    "language": "javascript"
+   },
+   {
+    "path": "frontend/src/store.js",
+    "lines": 85,
+    "language": "javascript"
+   }
+  ],
+  "symbols": [
+   {
+    "name": "connectDB",
+    "qualified": "connectDB",
+    "kind": "function",
+    "path": "backend/config/db.js",
+    "start": 3,
+    "end": 16,
+    "score": 3.8
+   },
+   {
+    "name": "addOrderItems",
+    "qualified": "addOrderItems",
+    "kind": "function",
+    "path": "backend/controllers/orderController.js",
+    "start": 7,
+    "end": 38,
+    "score": 11
+   },
+   {
+    "name": "getOrderById",
+    "qualified": "getOrderById",
+    "kind": "function",
+    "path": "backend/controllers/orderController.js",
+    "start": 43,
+    "end": 55,
+    "score": 9.7
+   },
+   {
+    "name": "updateOrderToPaid",
+    "qualified": "updateOrderToPaid",
+    "kind": "function",
+    "path": "backend/controllers/orderController.js",
+    "start": 60,
+    "end": 80,
+    "score": 10
+   },
+   {
+    "name": "updateOrderToDelivered",
+    "qualified": "updateOrderToDelivered",
+    "kind": "function",
+    "path": "backend/controllers/orderController.js",
+    "start": 85,
+    "end": 99,
+    "score": 9.9
+   },
+   {
+    "name": "getMyOrders",
+    "qualified": "getMyOrders",
+    "kind": "function",
+    "path": "backend/controllers/orderController.js",
+    "start": 104,
+    "end": 107,
+    "score": 8
+   },
+   {
+    "name": "getOrders",
+    "qualified": "getOrders",
+    "kind": "function",
+    "path": "backend/controllers/orderController.js",
+    "start": 112,
+    "end": 115,
+    "score": 8
+   },
+   {
+    "name": "getProducts",
+    "qualified": "getProducts",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 7,
+    "end": 26,
+    "score": 10
+   },
+   {
+    "name": "getProductById",
+    "qualified": "getProductById",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 31,
+    "end": 40,
+    "score": 9.3
+   },
+   {
+    "name": "deleteProduct",
+    "qualified": "deleteProduct",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 45,
+    "end": 55,
+    "score": 9.5
+   },
+   {
+    "name": "createProduct",
+    "qualified": "createProduct",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 60,
+    "end": 75,
+    "score": 10
+   },
+   {
+    "name": "updateProduct",
+    "qualified": "updateProduct",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 80,
+    "end": 108,
+    "score": 10
+   },
+   {
+    "name": "createProductReview",
+    "qualified": "createProductReview",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 113,
+    "end": 149,
+    "score": 10
+   },
+   {
+    "name": "getTopProducts",
+    "qualified": "getTopProducts",
+    "kind": "function",
+    "path": "backend/controllers/productController.js",
+    "start": 154,
+    "end": 158,
+    "score": 8.3
+   },
+   {
+    "name": "authUser",
+    "qualified": "authUser",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 8,
+    "end": 25,
+    "score": 11
+   },
+   {
+    "name": "registerUser",
+    "qualified": "registerUser",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 30,
+    "end": 58,
+    "score": 11
+   },
+   {
+    "name": "getUserProfile",
+    "qualified": "getUserProfile",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 63,
+    "end": 77,
+    "score": 9.9
+   },
+   {
+    "name": "updateUserProfile",
+    "qualified": "updateUserProfile",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 82,
+    "end": 105,
+    "score": 11
+   },
+   {
+    "name": "getUsers",
+    "qualified": "getUsers",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 110,
+    "end": 113,
+    "score": 8
+   },
+   {
+    "name": "deleteUser",
+    "qualified": "deleteUser",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 118,
+    "end": 128,
+    "score": 9.5
+   },
+   {
+    "name": "getUserById",
+    "qualified": "getUserById",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 133,
+    "end": 142,
+    "score": 9.3
+   },
+   {
+    "name": "updateUser",
+    "qualified": "updateUser",
+    "kind": "function",
+    "path": "backend/controllers/userController.js",
+    "start": 147,
+    "end": 167,
+    "score": 10
+   },
+   {
+    "name": "products",
+    "qualified": "products",
+    "kind": "value",
+    "path": "backend/data/products.js",
+    "start": 1,
+    "end": 74,
+    "score": 4
+   },
+   {
+    "name": "users",
+    "qualified": "users",
+    "kind": "value",
+    "path": "backend/data/users.js",
+    "start": 3,
+    "end": 20,
+    "score": 4
+   },
+   {
+    "name": "protect",
+    "qualified": "protect",
+    "kind": "function",
+    "path": "backend/middleware/authMiddleware.js",
+    "start": 5,
+    "end": 31,
+    "score": 10
+   },
+   {
+    "name": "admin",
+    "qualified": "admin",
+    "kind": "function",
+    "path": "backend/middleware/authMiddleware.js",
+    "start": 33,
+    "end": 40,
+    "score": 9
+   },
+   {
+    "name": "notFound",
+    "qualified": "notFound",
+    "kind": "function",
+    "path": "backend/middleware/errorMiddleware.js",
+    "start": 1,
+    "end": 5,
+    "score": 2.3
+   },
+   {
+    "name": "errorHandler",
+    "qualified": "errorHandler",
+    "kind": "function",
+    "path": "backend/middleware/errorMiddleware.js",
+    "start": 7,
+    "end": 14,
+    "score": 3
+   },
+   {
+    "name": "orderSchema",
+    "qualified": "orderSchema",
+    "kind": "value",
+    "path": "backend/models/orderModel.js",
+    "start": 3,
+    "end": 74,
+    "score": 4
+   },
+   {
+    "name": "Order",
+    "qualified": "Order",
+    "kind": "value",
+    "path": "backend/models/orderModel.js",
+    "start": 76,
+    "end": 76,
+    "score": 3
+   },
+   {
+    "name": "reviewSchema",
+    "qualified": "reviewSchema",
+    "kind": "value",
+    "path": "backend/models/productModel.js",
+    "start": 3,
+    "end": 17,
+    "score": 3.9
+   },
+   {
+    "name": "productSchema",
+    "qualified": "productSchema",
+    "kind": "value",
+    "path": "backend/models/productModel.js",
+    "start": 19,
+    "end": 71,
+    "score": 4
+   },
+   {
+    "name": "Product",
+    "qualified": "Product",
+    "kind": "value",
+    "path": "backend/models/productModel.js",
+    "start": 73,
+    "end": 73,
+    "score": 0
+   },
+   {
+    "name": "userSchema",
+    "qualified": "userSchema",
+    "kind": "value",
+    "path": "backend/models/userModel.js",
+    "start": 4,
+    "end": 28,
+    "score": 4
+   },
+   {
+    "name": "salt",
+    "qualified": "salt",
+    "kind": "value",
+    "path": "backend/models/userModel.js",
+    "start": 39,
+    "end": 39,
+    "score": 0
+   },
+   {
+    "name": "User",
+    "qualified": "User",
+    "kind": "value",
+    "path": "backend/models/userModel.js",
+    "start": 43,
+    "end": 43,
+    "score": 0
+   },
+   {
+    "name": "router",
+    "qualified": "router",
+    "kind": "value",
+    "path": "backend/routes/orderRoutes.js",
+    "start": 2,
+    "end": 2,
+    "score": 0
+   },
+   {
+    "name": "router",
+    "qualified": "router",
+    "kind": "value",
+    "path": "backend/routes/productRoutes.js",
+    "start": 2,
+    "end": 2,
+    "score": 0
+   },
+   {
+    "name": "router",
+    "qualified": "router",
+    "kind": "value",
+    "path": "backend/routes/uploadRoutes.js",
+    "start": 4,
+    "end": 4,
+    "score": 0
+   },
+   {
+    "name": "storage",
+    "qualified": "storage",
+    "kind": "value",
+    "path": "backend/routes/uploadRoutes.js",
+    "start": 6,
+    "end": 16,
+    "score": 3.5
+   },
+   {
+    "name": "destination",
+    "qualified": "destination",
+    "kind": "method",
+    "path": "backend/routes/uploadRoutes.js",
+    "start": 7,
+    "end": 9,
+    "score": 1.6
+   },
+   {
+    "name": "filename",
+    "qualified": "filename",
+    "kind": "method",
+    "path": "backend/routes/uploadRoutes.js",
+    "start": 10,
+    "end": 15,
+    "score": 2.6
+   },
+   {
+    "name": "checkFileType",
+    "qualified": "checkFileType",
+    "kind": "function",
+    "path": "backend/routes/uploadRoutes.js",
+    "start": 18,
+    "end": 28,
+    "score": 3.5
+   },
+   {
+    "name": "upload",
+    "qualified": "upload",
+    "kind": "value",
+    "path": "backend/routes/uploadRoutes.js",
+    "start": 30,
+    "end": 35,
+    "score": 2.6
+   },
+   {
+    "name": "router",
+    "qualified": "router",
+    "kind": "value",
+    "path": "backend/routes/userRoutes.js",
+    "start": 2,
+    "end": 2,
+    "score": 0
+   },
+   {
+    "name": "importData",
+    "qualified": "importData",
+    "kind": "function",
+    "path": "backend/seeder.js",
+    "start": 15,
+    "end": 37,
+    "score": 4
+   },
+   {
+    "name": "sampleProducts",
+    "qualified": "importData.sampleProducts",
+    "kind": "function",
+    "path": "backend/seeder.js",
+    "start": 25,
+    "end": 27,
+    "score": -0.4
+   },
+   {
+    "name": "destroyData",
+    "qualified": "destroyData",
+    "kind": "function",
+    "path": "backend/seeder.js",
+    "start": 39,
+    "end": 51,
+    "score": 3.7
+   },
+   {
+    "name": "app",
+    "qualified": "app",
+    "kind": "value",
+    "path": "backend/server.js",
+    "start": 18,
+    "end": 18,
+    "score": 0
+   },
+   {
+    "name": "__dirname",
+    "qualified": "__dirname",
+    "kind": "value",
+    "path": "backend/server.js",
+    "start": 35,
+    "end": 35,
+    "score": 0
+   },
+   {
+    "name": "generateToken",
+    "qualified": "generateToken",
+    "kind": "function",
+    "path": "backend/utils/generateToken.js",
+    "start": 3,
+    "end": 7,
+    "score": 11.3
+   },
+   {
+    "name": "addToCart",
+    "qualified": "addToCart",
+    "kind": "function",
+    "path": "frontend/src/actions/cartActions.js",
+    "start": 9,
+    "end": 25,
+    "score": 7
+   },
+   {
+    "name": "removeFromCart",
+    "qualified": "removeFromCart",
+    "kind": "function",
+    "path": "frontend/src/actions/cartActions.js",
+    "start": 27,
+    "end": 34,
+    "score": 6
+   },
+   {
+    "name": "saveShippingAddress",
+    "qualified": "saveShippingAddress",
+    "kind": "function",
+    "path": "frontend/src/actions/cartActions.js",
+    "start": 36,
+    "end": 43,
+    "score": 6
+   },
+   {
+    "name": "savePaymentMethod",
+    "qualified": "savePaymentMethod",
+    "kind": "function",
+    "path": "frontend/src/actions/cartActions.js",
+    "start": 45,
+    "end": 52,
+    "score": 6
+   },
+   {
+    "name": "createOrder",
+    "qualified": "createOrder",
+    "kind": "function",
+    "path": "frontend/src/actions/orderActions.js",
+    "start": 25,
+    "end": 66,
+    "score": 8
+   },
+   {
+    "name": "getOrderDetails",
+    "qualified": "getOrderDetails",
+    "kind": "function",
+    "path": "frontend/src/actions/orderActions.js",
+    "start": 68,
+    "end": 103,
+    "score": 8
+   },
+   {
+    "name": "payOrder",
+    "qualified": "payOrder",
+    "kind": "function",
+    "path": "frontend/src/actions/orderActions.js",
+    "start": 105,
+    "end": 148,
+    "score": 8
+   },
+   {
+    "name": "deliverOrder",
+    "qualified": "deliverOrder",
+    "kind": "function",
+    "path": "frontend/src/actions/orderActions.js",
+    "start": 150,
+    "end": 189,
+    "score": 8
+   },
+   {
+    "name": "listMyOrders",
+    "qualified": "listMyOrders",
+    "kind": "function",
+    "path": "frontend/src/actions/orderActions.js",
+    "start": 191,
+    "end": 226,
+    "score": 8
+   },
+   {
+    "name": "listOrders",
+    "qualified": "listOrders",
+    "kind": "function",
+    "path": "frontend/src/actions/orderActions.js",
+    "start": 228,
+    "end": 263,
+    "score": 8
+   },
+   {
+    "name": "listProducts",
+    "qualified": "listProducts",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 27,
+    "end": 50,
+    "score": 10
+   },
+   {
+    "name": "listProductDetails",
+    "qualified": "listProductDetails",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 52,
+    "end": 71,
+    "score": 10
+   },
+   {
+    "name": "deleteProduct",
+    "qualified": "deleteProduct",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 73,
+    "end": 107,
+    "score": 11
+   },
+   {
+    "name": "createProduct",
+    "qualified": "createProduct",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 109,
+    "end": 144,
+    "score": 11
+   },
+   {
+    "name": "updateProduct",
+    "qualified": "updateProduct",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 146,
+    "end": 187,
+    "score": 11
+   },
+   {
+    "name": "createProductReview",
+    "qualified": "createProductReview",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 189,
+    "end": 227,
+    "score": 11
+   },
+   {
+    "name": "listTopProducts",
+    "qualified": "listTopProducts",
+    "kind": "function",
+    "path": "frontend/src/actions/productActions.js",
+    "start": 229,
+    "end": 248,
+    "score": 7
+   },
+   {
+    "name": "login",
+    "qualified": "login",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 30,
+    "end": 63,
+    "score": 7
+   },
+   {
+    "name": "logout",
+    "qualified": "logout",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 65,
+    "end": 75,
+    "score": 51.5
+   },
+   {
+    "name": "register",
+    "qualified": "register",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 77,
+    "end": 115,
+    "score": 4
+   },
+   {
+    "name": "getUserDetails",
+    "qualified": "getUserDetails",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 117,
+    "end": 152,
+    "score": 11
+   },
+   {
+    "name": "updateUserProfile",
+    "qualified": "updateUserProfile",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 154,
+    "end": 195,
+    "score": 11
+   },
+   {
+    "name": "listUsers",
+    "qualified": "listUsers",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 197,
+    "end": 232,
+    "score": 8
+   },
+   {
+    "name": "deleteUser",
+    "qualified": "deleteUser",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 234,
+    "end": 266,
+    "score": 11
+   },
+   {
+    "name": "updateUser",
+    "qualified": "updateUser",
+    "kind": "function",
+    "path": "frontend/src/actions/userActions.js",
+    "start": 268,
+    "end": 305,
+    "score": 11
+   },
+   {
+    "name": "App",
+    "qualified": "App",
+    "kind": "function",
+    "path": "frontend/src/App.js",
+    "start": 22,
+    "end": 64,
+    "score": 4
+   },
+   {
+    "name": "CheckoutSteps",
+    "qualified": "CheckoutSteps",
+    "kind": "function",
+    "path": "frontend/src/components/CheckoutSteps.js",
+    "start": 5,
+    "end": 49,
+    "score": 4
+   },
+   {
+    "name": "Footer",
+    "qualified": "Footer",
+    "kind": "function",
+    "path": "frontend/src/components/Footer.js",
+    "start": 4,
+    "end": 14,
+    "score": 3.5
+   },
+   {
+    "name": "FormContainer",
+    "qualified": "FormContainer",
+    "kind": "function",
+    "path": "frontend/src/components/FormContainer.js",
+    "start": 4,
+    "end": 14,
+    "score": 3.5
+   },
+   {
+    "name": "Header",
+    "qualified": "Header",
+    "kind": "function",
+    "path": "frontend/src/components/Header.js",
+    "start": 9,
+    "end": 70,
+    "score": 4
+   },
+   {
+    "name": "logoutHandler",
+    "qualified": "Header.logoutHandler",
+    "kind": "function",
+    "path": "frontend/src/components/Header.js",
+    "start": 15,
+    "end": 17,
+    "score": 0.6
+   },
+   {
+    "name": "Loader",
+    "qualified": "Loader",
+    "kind": "function",
+    "path": "frontend/src/components/Loader.js",
+    "start": 4,
+    "end": 19,
+    "score": 4
+   },
+   {
+    "name": "Message",
+    "qualified": "Message",
+    "kind": "function",
+    "path": "frontend/src/components/Message.js",
+    "start": 4,
+    "end": 6,
+    "score": 1.6
+   },
+   {
+    "name": "Meta",
+    "qualified": "Meta",
+    "kind": "function",
+    "path": "frontend/src/components/Meta.js",
+    "start": 4,
+    "end": 12,
+    "score": 3.2
+   },
+   {
+    "name": "Paginate",
+    "qualified": "Paginate",
+    "kind": "function",
+    "path": "frontend/src/components/Paginate.js",
+    "start": 5,
+    "end": 26,
+    "score": 4
+   },
+   {
+    "name": "Product",
+    "qualified": "Product",
+    "kind": "function",
+    "path": "frontend/src/components/Product.js",
+    "start": 6,
+    "end": 31,
+    "score": 4
+   },
+   {
+    "name": "ProductCarousel",
+    "qualified": "ProductCarousel",
+    "kind": "function",
+    "path": "frontend/src/components/ProductCarousel.js",
+    "start": 9,
+    "end": 39,
+    "score": 5
+   },
+   {
+    "name": "Rating",
+    "qualified": "Rating",
+    "kind": "function",
+    "path": "frontend/src/components/Rating.js",
+    "start": 3,
+    "end": 69,
+    "score": 4
+   },
+   {
+    "name": "SearchBox",
+    "qualified": "SearchBox",
+    "kind": "function",
+    "path": "frontend/src/components/SearchBox.js",
+    "start": 4,
+    "end": 30,
+    "score": 4
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "SearchBox.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/components/SearchBox.js",
+    "start": 7,
+    "end": 14,
+    "score": 1
+   },
+   {
+    "name": "cartReducer",
+    "qualified": "cartReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/cartReducers.js",
+    "start": 9,
+    "end": 55,
+    "score": 4
+   },
+   {
+    "name": "orderCreateReducer",
+    "qualified": "orderCreateReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/orderReducers.js",
+    "start": 26,
+    "end": 48,
+    "score": 4
+   },
+   {
+    "name": "orderDetailsReducer",
+    "qualified": "orderDetailsReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/orderReducers.js",
+    "start": 50,
+    "end": 73,
+    "score": 4
+   },
+   {
+    "name": "orderPayReducer",
+    "qualified": "orderPayReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/orderReducers.js",
+    "start": 75,
+    "end": 96,
+    "score": 4
+   },
+   {
+    "name": "orderDeliverReducer",
+    "qualified": "orderDeliverReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/orderReducers.js",
+    "start": 98,
+    "end": 119,
+    "score": 4
+   },
+   {
+    "name": "orderListMyReducer",
+    "qualified": "orderListMyReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/orderReducers.js",
+    "start": 121,
+    "end": 142,
+    "score": 4
+   },
+   {
+    "name": "orderListReducer",
+    "qualified": "orderListReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/orderReducers.js",
+    "start": 144,
+    "end": 163,
+    "score": 4
+   },
+   {
+    "name": "productListReducer",
+    "qualified": "productListReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 28,
+    "end": 44,
+    "score": 4
+   },
+   {
+    "name": "productDetailsReducer",
+    "qualified": "productDetailsReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 46,
+    "end": 60,
+    "score": 3.9
+   },
+   {
+    "name": "productDeleteReducer",
+    "qualified": "productDeleteReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 62,
+    "end": 73,
+    "score": 3.6
+   },
+   {
+    "name": "productCreateReducer",
+    "qualified": "productCreateReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 75,
+    "end": 88,
+    "score": 3.8
+   },
+   {
+    "name": "productUpdateReducer",
+    "qualified": "productUpdateReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 90,
+    "end": 103,
+    "score": 3.8
+   },
+   {
+    "name": "productReviewCreateReducer",
+    "qualified": "productReviewCreateReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 105,
+    "end": 118,
+    "score": 3.8
+   },
+   {
+    "name": "productTopRatedReducer",
+    "qualified": "productTopRatedReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/productReducers.js",
+    "start": 120,
+    "end": 131,
+    "score": 3.6
+   },
+   {
+    "name": "userLoginReducer",
+    "qualified": "userLoginReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 30,
+    "end": 43,
+    "score": 3.8
+   },
+   {
+    "name": "userRegisterReducer",
+    "qualified": "userRegisterReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 45,
+    "end": 58,
+    "score": 3.8
+   },
+   {
+    "name": "userDetailsReducer",
+    "qualified": "userDetailsReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 60,
+    "end": 73,
+    "score": 3.8
+   },
+   {
+    "name": "userUpdateProfileReducer",
+    "qualified": "userUpdateProfileReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 75,
+    "end": 88,
+    "score": 3.8
+   },
+   {
+    "name": "userListReducer",
+    "qualified": "userListReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 90,
+    "end": 103,
+    "score": 3.8
+   },
+   {
+    "name": "userDeleteReducer",
+    "qualified": "userDeleteReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 105,
+    "end": 116,
+    "score": 3.6
+   },
+   {
+    "name": "userUpdateReducer",
+    "qualified": "userUpdateReducer",
+    "kind": "function",
+    "path": "frontend/src/reducers/userReducers.js",
+    "start": 118,
+    "end": 133,
+    "score": 4
+   },
+   {
+    "name": "CartScreen",
+    "qualified": "CartScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/CartScreen.js",
+    "start": 8,
+    "end": 112,
+    "score": 6
+   },
+   {
+    "name": "removeFromCartHandler",
+    "qualified": "CartScreen.removeFromCartHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/CartScreen.js",
+    "start": 24,
+    "end": 26,
+    "score": 3.6
+   },
+   {
+    "name": "checkoutHandler",
+    "qualified": "CartScreen.checkoutHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/CartScreen.js",
+    "start": 28,
+    "end": 30,
+    "score": -0.4
+   },
+   {
+    "name": "HomeScreen",
+    "qualified": "HomeScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/HomeScreen.js",
+    "start": 13,
+    "end": 60,
+    "score": 5
+   },
+   {
+    "name": "LoginScreen",
+    "qualified": "LoginScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/LoginScreen.js",
+    "start": 10,
+    "end": 73,
+    "score": 4
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "LoginScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/LoginScreen.js",
+    "start": 27,
+    "end": 30,
+    "score": 1
+   },
+   {
+    "name": "OrderListScreen",
+    "qualified": "OrderListScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/OrderListScreen.js",
+    "start": 9,
+    "end": 81,
+    "score": 5
+   },
+   {
+    "name": "OrderScreen",
+    "qualified": "OrderScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/OrderScreen.js",
+    "start": 19,
+    "end": 232,
+    "score": 7
+   },
+   {
+    "name": "addDecimals",
+    "qualified": "OrderScreen.addDecimals",
+    "kind": "function",
+    "path": "frontend/src/screens/OrderScreen.js",
+    "start": 40,
+    "end": 42,
+    "score": 2.6
+   },
+   {
+    "name": "addPayPalScript",
+    "qualified": "OrderScreen.addPayPalScript",
+    "kind": "function",
+    "path": "frontend/src/screens/OrderScreen.js",
+    "start": 54,
+    "end": 64,
+    "score": 4.5
+   },
+   {
+    "name": "successPaymentHandler",
+    "qualified": "OrderScreen.successPaymentHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/OrderScreen.js",
+    "start": 79,
+    "end": 82,
+    "score": 1
+   },
+   {
+    "name": "deliverHandler",
+    "qualified": "OrderScreen.deliverHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/OrderScreen.js",
+    "start": 84,
+    "end": 86,
+    "score": 0.6
+   },
+   {
+    "name": "PaymentScreen",
+    "qualified": "PaymentScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/PaymentScreen.js",
+    "start": 8,
+    "end": 60,
+    "score": 4
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "PaymentScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/PaymentScreen.js",
+    "start": 20,
+    "end": 24,
+    "score": 1.3
+   },
+   {
+    "name": "PlaceOrderScreen",
+    "qualified": "PlaceOrderScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/PlaceOrderScreen.js",
+    "start": 11,
+    "end": 167,
+    "score": 5
+   },
+   {
+    "name": "addDecimals",
+    "qualified": "PlaceOrderScreen.addDecimals",
+    "kind": "function",
+    "path": "frontend/src/screens/PlaceOrderScreen.js",
+    "start": 22,
+    "end": 24,
+    "score": 2.6
+   },
+   {
+    "name": "placeOrderHandler",
+    "qualified": "PlaceOrderScreen.placeOrderHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/PlaceOrderScreen.js",
+    "start": 49,
+    "end": 61,
+    "score": 2.7
+   },
+   {
+    "name": "ProductEditScreen",
+    "qualified": "ProductEditScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductEditScreen.js",
+    "start": 12,
+    "end": 194,
+    "score": 5
+   },
+   {
+    "name": "uploadFileHandler",
+    "qualified": "ProductEditScreen.uploadFileHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductEditScreen.js",
+    "start": 55,
+    "end": 76,
+    "score": 2
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "ProductEditScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductEditScreen.js",
+    "start": 78,
+    "end": 92,
+    "score": 1.9
+   },
+   {
+    "name": "ProductListScreen",
+    "qualified": "ProductListScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductListScreen.js",
+    "start": 15,
+    "end": 137,
+    "score": 6
+   },
+   {
+    "name": "deleteHandler",
+    "qualified": "ProductListScreen.deleteHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductListScreen.js",
+    "start": 63,
+    "end": 67,
+    "score": 3.3
+   },
+   {
+    "name": "createProductHandler",
+    "qualified": "ProductListScreen.createProductHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductListScreen.js",
+    "start": 69,
+    "end": 71,
+    "score": -0.4
+   },
+   {
+    "name": "ProductScreen",
+    "qualified": "ProductScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductScreen.js",
+    "start": 15,
+    "end": 222,
+    "score": 5
+   },
+   {
+    "name": "addToCartHandler",
+    "qualified": "ProductScreen.addToCartHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductScreen.js",
+    "start": 46,
+    "end": 48,
+    "score": -0.4
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "ProductScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProductScreen.js",
+    "start": 50,
+    "end": 58,
+    "score": 1.2
+   },
+   {
+    "name": "ProfileScreen",
+    "qualified": "ProfileScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/ProfileScreen.js",
+    "start": 11,
+    "end": 168,
+    "score": 6
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "ProfileScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ProfileScreen.js",
+    "start": 47,
+    "end": 54,
+    "score": 1
+   },
+   {
+    "name": "RegisterScreen",
+    "qualified": "RegisterScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/RegisterScreen.js",
+    "start": 10,
+    "end": 101,
+    "score": 4
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "RegisterScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/RegisterScreen.js",
+    "start": 30,
+    "end": 37,
+    "score": 1
+   },
+   {
+    "name": "ShippingScreen",
+    "qualified": "ShippingScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/ShippingScreen.js",
+    "start": 8,
+    "end": 80,
+    "score": 4
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "ShippingScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/ShippingScreen.js",
+    "start": 19,
+    "end": 23,
+    "score": 1.3
+   },
+   {
+    "name": "UserEditScreen",
+    "qualified": "UserEditScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/UserEditScreen.js",
+    "start": 11,
+    "end": 102,
+    "score": 5
+   },
+   {
+    "name": "submitHandler",
+    "qualified": "UserEditScreen.submitHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/UserEditScreen.js",
+    "start": 45,
+    "end": 48,
+    "score": 0
+   },
+   {
+    "name": "UserListScreen",
+    "qualified": "UserListScreen",
+    "kind": "function",
+    "path": "frontend/src/screens/UserListScreen.js",
+    "start": 9,
+    "end": 89,
+    "score": 6
+   },
+   {
+    "name": "deleteHandler",
+    "qualified": "UserListScreen.deleteHandler",
+    "kind": "function",
+    "path": "frontend/src/screens/UserListScreen.js",
+    "start": 29,
+    "end": 33,
+    "score": 3.3
+   },
+   {
+    "name": "isLocalhost",
+    "qualified": "isLocalhost",
+    "kind": "value",
+    "path": "frontend/src/serviceWorker.js",
+    "start": 13,
+    "end": 21,
+    "score": 3.2
+   },
+   {
+    "name": "register",
+    "qualified": "register",
+    "kind": "function",
+    "path": "frontend/src/serviceWorker.js",
+    "start": 23,
+    "end": 55,
+    "score": 9
+   },
+   {
+    "name": "registerValidSW",
+    "qualified": "registerValidSW",
+    "kind": "function",
+    "path": "frontend/src/serviceWorker.js",
+    "start": 57,
+    "end": 99,
+    "score": 11
+   },
+   {
+    "name": "checkValidServiceWorker",
+    "qualified": "checkValidServiceWorker",
+    "kind": "function",
+    "path": "frontend/src/serviceWorker.js",
+    "start": 101,
+    "end": 129,
+    "score": 9
+   },
+   {
+    "name": "unregister",
+    "qualified": "unregister",
+    "kind": "function",
+    "path": "frontend/src/serviceWorker.js",
+    "start": 131,
+    "end": 141,
+    "score": 6.5
+   },
+   {
+    "name": "reducer",
+    "qualified": "reducer",
+    "kind": "value",
+    "path": "frontend/src/store.js",
+    "start": 32,
+    "end": 54,
+    "score": 4
+   },
+   {
+    "name": "initialState",
+    "qualified": "initialState",
+    "kind": "value",
+    "path": "frontend/src/store.js",
+    "start": 68,
+    "end": 74,
+    "score": 2.8
+   },
+   {
+    "name": "middleware",
+    "qualified": "middleware",
+    "kind": "value",
+    "path": "frontend/src/store.js",
+    "start": 76,
+    "end": 76,
+    "score": 0
+   },
+   {
+    "name": "store",
+    "qualified": "store",
+    "kind": "value",
+    "path": "frontend/src/store.js",
+    "start": 78,
+    "end": 82,
+    "score": 2.3
+   }
+  ],
+  "routes": [
+   {
+    "method": "GET",
+    "path": "/",
+    "file": "backend/routes/orderRoutes.js",
+    "line": 13,
+    "handlers": [
+     "protect",
+     "admin",
+     "getOrders"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/",
+    "file": "backend/routes/orderRoutes.js",
+    "line": 13,
+    "handlers": [
+     "protect",
+     "addOrderItems"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/myorders",
+    "file": "backend/routes/orderRoutes.js",
+    "line": 14,
+    "handlers": [
+     "protect",
+     "getMyOrders"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/:id",
+    "file": "backend/routes/orderRoutes.js",
+    "line": 15,
+    "handlers": [
+     "protect",
+     "getOrderById"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/:id/pay",
+    "file": "backend/routes/orderRoutes.js",
+    "line": 16,
+    "handlers": [
+     "protect",
+     "updateOrderToPaid"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/:id/deliver",
+    "file": "backend/routes/orderRoutes.js",
+    "line": 17,
+    "handlers": [
+     "protect",
+     "admin",
+     "updateOrderToDelivered"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/",
+    "file": "backend/routes/productRoutes.js",
+    "line": 14,
+    "handlers": [
+     "protect",
+     "admin",
+     "createProduct"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/",
+    "file": "backend/routes/productRoutes.js",
+    "line": 14,
+    "handlers": [
+     "getProducts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/:id/reviews",
+    "file": "backend/routes/productRoutes.js",
+    "line": 15,
+    "handlers": [
+     "protect",
+     "createProductReview"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/top",
+    "file": "backend/routes/productRoutes.js",
+    "line": 16,
+    "handlers": [
+     "getTopProducts"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/:id",
+    "file": "backend/routes/productRoutes.js",
+    "line": 17,
+    "handlers": [
+     "protect",
+     "admin",
+     "updateProduct"
+    ]
+   },
+   {
+    "method": "DELETE",
+    "path": "/:id",
+    "file": "backend/routes/productRoutes.js",
+    "line": 17,
+    "handlers": [
+     "protect",
+     "admin",
+     "deleteProduct"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/:id",
+    "file": "backend/routes/productRoutes.js",
+    "line": 17,
+    "handlers": [
+     "getProductById"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/",
+    "file": "backend/routes/uploadRoutes.js",
+    "line": 37,
+    "handlers": [
+     "(inline)"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/",
+    "file": "backend/routes/userRoutes.js",
+    "line": 15,
+    "handlers": [
+     "protect",
+     "admin",
+     "getUsers"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/",
+    "file": "backend/routes/userRoutes.js",
+    "line": 15,
+    "handlers": [
+     "registerUser"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/login",
+    "file": "backend/routes/userRoutes.js",
+    "line": 16,
+    "handlers": [
+     "authUser"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/profile",
+    "file": "backend/routes/userRoutes.js",
+    "line": 17,
+    "handlers": [
+     "protect",
+     "updateUserProfile"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/profile",
+    "file": "backend/routes/userRoutes.js",
+    "line": 17,
+    "handlers": [
+     "protect",
+     "getUserProfile"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/:id",
+    "file": "backend/routes/userRoutes.js",
+    "line": 21,
+    "handlers": [
+     "protect",
+     "admin",
+     "updateUser"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/:id",
+    "file": "backend/routes/userRoutes.js",
+    "line": 21,
+    "handlers": [
+     "protect",
+     "admin",
+     "getUserById"
+    ]
+   },
+   {
+    "method": "DELETE",
+    "path": "/:id",
+    "file": "backend/routes/userRoutes.js",
+    "line": 21,
+    "handlers": [
+     "protect",
+     "admin",
+     "deleteUser"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/config/paypal",
+    "file": "backend/server.js",
+    "line": 31,
+    "handlers": [
+     "(inline)"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "*",
+    "file": "backend/server.js",
+    "line": 41,
+    "handlers": [
+     "(inline)"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/",
+    "file": "backend/server.js",
+    "line": 45,
+    "handlers": [
+     "(inline)"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/api/orders",
+    "file": "frontend/src/actions/orderActions.js",
+    "line": 42,
+    "handlers": [
+     "order",
+     "config"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/orders/${id}",
+    "file": "frontend/src/actions/orderActions.js",
+    "line": 84,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/api/orders/${orderId}/pay",
+    "file": "frontend/src/actions/orderActions.js",
+    "line": 125,
+    "handlers": [
+     "paymentResult",
+     "config"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/api/orders/${order._id}/deliver",
+    "file": "frontend/src/actions/orderActions.js",
+    "line": 166,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/orders/myorders",
+    "file": "frontend/src/actions/orderActions.js",
+    "line": 207,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/orders",
+    "file": "frontend/src/actions/orderActions.js",
+    "line": 244,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "DELETE",
+    "path": "/api/products/${id}",
+    "file": "frontend/src/actions/productActions.js",
+    "line": 89,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/api/products",
+    "file": "frontend/src/actions/productActions.js",
+    "line": 125,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/api/products/${product._id}",
+    "file": "frontend/src/actions/productActions.js",
+    "line": 163,
+    "handlers": [
+     "product",
+     "config"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/api/products/${productId}/reviews",
+    "file": "frontend/src/actions/productActions.js",
+    "line": 209,
+    "handlers": [
+     "review",
+     "config"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/api/users/login",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 42,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/api/users",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 89,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/users/${id}",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 133,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/api/users/profile",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 171,
+    "handlers": [
+     "user",
+     "config"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/users",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 213,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "DELETE",
+    "path": "/api/users/${id}",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 250,
+    "handlers": [
+     "config"
+    ]
+   },
+   {
+    "method": "PUT",
+    "path": "/api/users/${user._id}",
+    "file": "frontend/src/actions/userActions.js",
+    "line": 285,
+    "handlers": [
+     "user",
+     "config"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/api/upload",
+    "file": "frontend/src/screens/ProductEditScreen.js",
+    "line": 68,
+    "handlers": [
+     "formData",
+     "config"
+    ]
+   }
+  ]
+ },
+ "citations": 127,
+ "verification": {
+  "ran": true,
+  "fixed": 1,
+  "invalidCitationsRemoved": 1
+ },
+ "model": "gemini-3.8-flash",
+ "usage": {
+  "input": 86064,
+  "output": 7221
+ },
+ "rawBaseUrl": "https://raw.githubusercontent.com/bradtraversy/proshop_mern/1d20b5b09e796e2f00779306c390360e9e573276/",
+ "generatedAt": "2026-11-25T12:41:23.136Z"
+}
