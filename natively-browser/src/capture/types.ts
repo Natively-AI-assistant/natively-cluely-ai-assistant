@@ -182,6 +182,8 @@ export interface CodingProblemPayload {
   visibleCode?: string;
   language?: string;
   selectedText?: string;
+  /** What the page showed for the last run of the code (#646), as a labelled RUN RESULT section. */
+  runResult?: string;
 }
 
 /** Notes/docs editor payload — manual-first, selected/visible only. */

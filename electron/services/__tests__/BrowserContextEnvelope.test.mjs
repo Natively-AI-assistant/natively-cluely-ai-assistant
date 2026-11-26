@@ -118,6 +118,50 @@ describe('formatEnvelopeForPrompt', () => {
     assert.ok(!s.includes('CONSTRAINTS:'));
     assert.match(s, /PROBLEM_TITLE:/);
   });
+
+  // #646: the result of the user's last run, and the budget that keeps it.
+  test('RUN_RESULT section right after the code, with a rule to use it', () => {
+    const s = formatEnvelopeForPrompt(
+      ENV({ payload: { visibleCode: 'int f() {}', runResult: 'RUN RESULT (HackerRank …):\nSTATUS: Wrong Answer :(\nYour Output (stdout):\n0' } }),
+    );
+    assert.match(s, /VISIBLE_CODE:\nint f\(\) \{\}\n\nRUN_RESULT:\nRUN RESULT \(HackerRank …\):\nSTATUS: Wrong Answer :\(\nYour Output \(stdout\):\n0\n/);
+    assert.match(s, /RUN_RESULT is what the page showed for the last run/);
+    assert.doesNotMatch(formatEnvelopeForPrompt(ENV()), /RUN_RESULT/);
+  });
+
+  test('the same code as starter and visible code is sent once', () => {
+    const code = 'class Solution {\n  int f() {}\n}';
+    const s = formatEnvelopeForPrompt(ENV({ payload: { starterCode: code, visibleCode: code } }));
+    assert.doesNotMatch(s, /VISIBLE_STARTER_CODE/);
+    assert.equal(s.split('int f()').length - 1, 1);
+    const two = formatEnvelopeForPrompt(ENV({ payload: { starterCode: 'def f(): pass', visibleCode: 'def f(): return 1' } }));
+    assert.match(two, /VISIBLE_STARTER_CODE:\ndef f\(\): pass/);
+  });
+
+  test('over budget: the statement is cut, never the code or the run result', () => {
+    const payload = {
+      problemTitle: 'Matrix Layer Rotation',
+      problemStatement: 'Rotate the layers. '.repeat(420), // 7980 chars
+      examples: 'Sample Input\n'.repeat(150),
+      constraints: '1 <= n <= 300',
+      visibleCode: 'x'.repeat(8000),
+      starterCode: 'x'.repeat(8000),
+      runResult: 'RUN RESULT (HackerRank):\n' + 'y'.repeat(7800),
+    };
+    const s = formatEnvelopeForPrompt(ENV({ payload }), 24000);
+    assert.ok(s.length <= 24000, `length ${s.length}`);
+    assert.ok(s.includes('x'.repeat(8000)));
+    assert.ok(s.includes('y'.repeat(7800)));
+    assert.match(s, /PROBLEM_STATEMENT:\nRotate the layers\./);
+    assert.match(s, /…\(cut to fit the capture budget\)/);
+    assert.match(s, /CONSTRAINTS:\n1 <= n <= 300/);
+    assert.match(s, /RULES: /);
+  });
+
+  test('within budget: nothing is cut', () => {
+    const s = formatEnvelopeForPrompt(ENV({ payload: { problemStatement: 'short', visibleCode: 'c' } }), 24000);
+    assert.doesNotMatch(s, /cut to fit/);
+  });
 });
 
 describe('telemetry — privacy-safe', () => {

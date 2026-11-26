@@ -17930,7 +17930,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             const envelope = sanitizeContextEnvelope(options.domContextEnvelope);
             // Its formula markers too: an image that did not fit in this request (#645).
-            const header = appState.formulaTextFor(formatEnvelopeForPrompt(envelope), imagePaths);
+            // Kept under the shared budget with room to spare: formula text added
+            // below can lengthen it, and the cut below falls on the dom copy (#646).
+            const header = appState.formulaTextFor(formatEnvelopeForPrompt(envelope, DOM_CONTEXT_MAX_CHARS - 1000), imagePaths);
             if (header) {
               effectiveDomContext = `${header}\n\n---\n\n${effectiveDomContext || ''}`.substring(
                 0,

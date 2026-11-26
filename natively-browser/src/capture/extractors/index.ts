@@ -30,12 +30,14 @@ import {
   allText,
   bodyInnerText,
   collapseWhitespace,
+  editorLanguage,
   extractEditorCode,
   extractPreBlocks,
   firstText,
   sliceSection,
 } from './dom-helpers';
 import { FormulaTokens, FORMULAS_NOTE, hasFormulaGap, inlineFormulas, type InlineFormulasOptions } from '../../math-text';
+import { isInRunResult, readRunResult } from '../run-result';
 
 const MAX_PAYLOAD_FIELD = 8000;
 
@@ -128,7 +130,8 @@ function extractCodingProblem(input: ExtractInput, formulas?: InlineFormulasOpti
   const examples = sliceSection(problemStatement, hints?.examplesSignals || ['Example', 'Sample Input', 'Sample Output']);
   const constraints = sliceSection(problemStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
   const visibleCode = extractEditorCode(doc, hints?.codeSelectors);
-  const preBlocks = extractPreBlocks(doc);
+  const preBlocks = extractPreBlocks(doc, undefined, isInRunResult);
+  const runResult = readRunResult(doc, input.candidate.host || '', input.candidate.url || '');
 
   // The visible editor code is also the best starter-code signal; keep both so
   // the prompt can preserve the EXACT signature.
@@ -152,10 +155,12 @@ function extractCodingProblem(input: ExtractInput, formulas?: InlineFormulasOpti
     constraints: cap(constraints, 1200),
     visibleCode: cap(visibleCode),
     starterCode: cap(starterCode),
+    language: editorLanguage(doc) || undefined,
     selectedText: cap(selection, 4000),
+    runResult: runResult || undefined,
   };
 
-  return finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload));
+  return finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload, runResult));
 }
 
 function extractCodingEditor(input: ExtractInput): ExtractOutput {
@@ -352,14 +357,20 @@ function finishEnvelope(
   return { envelope, dom };
 }
 
-/** Build the legacy `dom` string for a coding payload (front-matter style). */
-function buildCodingDom(p: CodingProblemPayload): string {
+/**
+ * Build the legacy `dom` string for a coding payload (front-matter style).
+ * `runResult` is the page's RUN RESULT section (run-result.ts, #646). It is
+ * in the payload too; the dom keeps it for a desktop that predates that field.
+ */
+function buildCodingDom(p: CodingProblemPayload, runResult = ''): string {
   const parts: string[] = [];
   if (p.problemTitle) parts.push(`TITLE: ${p.problemTitle}`);
   if (p.selectedText) parts.push(`SELECTED TEXT:\n${p.selectedText}`);
+  if (p.language) parts.push(`LANGUAGE: ${p.language}`);
   if (p.starterCode || p.visibleCode) {
     parts.push(`CODE ON PAGE (verbatim — use this exact structure, names, and signature):\n${p.visibleCode || p.starterCode}`);
   }
+  if (runResult) parts.push(runResult);
   if ([p.problemStatement, p.examples, p.constraints].some(hasFormulaGap)) {
     parts.push(FORMULAS_NOTE);
   }

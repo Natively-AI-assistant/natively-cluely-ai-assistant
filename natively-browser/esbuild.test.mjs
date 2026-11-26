@@ -31,6 +31,8 @@ await build({
     path.join(rootDir, 'src', 'capture', 'extractors', 'index.ts'),
     path.join(rootDir, 'src', 'capture', 'smart-capture.ts'),
     path.join(rootDir, 'src', 'capture', 'page-signals.ts'),
+    // What a coding site shows for the last run of the code (#646).
+    path.join(rootDir, 'src', 'capture', 'run-result.ts'),
     // Meeting detection: which open tabs are meetings, as keys only.
     path.join(rootDir, 'src', 'meeting-tabs.ts'),
     // What the Meet reader reads from a Meet page.

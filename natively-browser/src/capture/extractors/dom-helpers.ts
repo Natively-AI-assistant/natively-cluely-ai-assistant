@@ -225,8 +225,31 @@ export function extractEditorCode(doc: ParentNode, extraSelectors?: string[], ca
   return joined.length > cap ? joined.slice(0, cap) + '\n…(code truncated)' : joined;
 }
 
-/** Capture <pre> blocks (problem examples / I-O), preserving whitespace. */
-export function extractPreBlocks(doc: ParentNode, cap = 4000): string {
+/**
+ * The language the page's code editor is set to, as the editor names it
+ * ("java", "python"), or ''. Monaco puts it in `data-mode-id` on the editor,
+ * CodeMirror 6 in `data-language` on its content.
+ */
+export function editorLanguage(doc: ParentNode): string {
+  const read = (selector: string, attr: string): string => {
+    try {
+      for (const el of Array.from(doc.querySelectorAll(selector))) {
+        const v = (el.getAttribute(attr) || '').trim();
+        if (v && v !== 'plaintext') return v.slice(0, 40);
+      }
+    } catch {
+      /* shim without querySelectorAll */
+    }
+    return '';
+  };
+  return read('.monaco-editor', 'data-mode-id') || read('.cm-content', 'data-language');
+}
+
+/**
+ * Capture <pre> blocks (problem examples / I-O), preserving whitespace.
+ * `skip` leaves out blocks that are not the problem's, such as a run result.
+ */
+export function extractPreBlocks(doc: ParentNode, cap = 4000, skip?: (el: Element) => boolean): string {
   const parts: string[] = [];
   const seen = new Set<string>();
   let nodes: NodeListOf<Element> | null = null;
@@ -236,6 +259,7 @@ export function extractPreBlocks(doc: ParentNode, cap = 4000): string {
     return '';
   }
   nodes?.forEach((el) => {
+    if (skip?.(el)) return;
     const t = (el.textContent || '').replace(/\r\n?/g, '\n').trim();
     if (t.length >= 2 && !seen.has(t)) {
       seen.add(t);

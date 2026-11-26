@@ -813,7 +813,8 @@ describe('the automatic capture\'s formula images', () => {
     const ipc = fs.readFileSync(path.resolve(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
     const h = ipc.slice(ipc.indexOf("'generate-what-to-say'"));
     const ask = h.indexOf('imagePaths = await appState.withFormulaScreenshot(options?.domContext, imagePaths);');
-    const header = h.indexOf('const header = appState.formulaTextFor(formatEnvelopeForPrompt(envelope), imagePaths);');
+    // The header's budget argument (#646) is not what this checks.
+    const header = h.indexOf('const header = appState.formulaTextFor(formatEnvelopeForPrompt(envelope');
     assert.ok(ask > 0 && header > ask);
   });
 });

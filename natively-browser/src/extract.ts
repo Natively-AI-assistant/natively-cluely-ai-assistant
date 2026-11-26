@@ -13,8 +13,9 @@
  *      (HackerRank: Sample Input/Output), losing the statement and Constraints.
  *   2. Fallback to `body.innerText` (script/style/noscript excluded) for app-like
  *      pages where Readability returns null.
- *   3. Prepend page <title>, the user's current selection, and the visible
- *      <h1..h3> heading hierarchy.
+ *   3. Prepend page <title>, the user's current selection, the editor's
+ *      language and code, the result of the last run where the site shows one
+ *      (capture/run-result.ts, #646), and the visible <h1..h3> headings.
  *   4. Cap at DOM_CONTEXT_MAX_CHARS, trimming the body from the END so the
  *      title + selection (the highest-signal front matter) always survive.
  *
@@ -45,7 +46,8 @@ import {
   type InlineFormulasOptions,
 } from './math-text';
 import { DEFAULT_REGISTRY, findPlatform, normalizeHost } from './capture/registry/registry';
-import { blockText, outermost } from './capture/extractors/dom-helpers';
+import { blockText, editorLanguage, outermost } from './capture/extractors/dom-helpers';
+import { isInRunResult, readRunResult } from './capture/run-result';
 
 // Mirror of DOM_CONTEXT_MAX_CHARS in electron/config/constants.ts and
 // src/constants/domCapture.ts. This is a separate package so we cannot import
@@ -170,12 +172,7 @@ function innerTextFallback(doc: Document, formulas: InlineFormulasOptions): stri
  * not a known platform or the selectors match nothing.
  */
 function platformStatement(doc: Document, formulas: InlineFormulasOptions): string {
-  let host = '';
-  let url = '';
-  try {
-    host = (doc as any).location?.hostname || '';
-    url = (doc as any).location?.href || '';
-  } catch { /* no location in tests */ }
+  const { host, url } = pageLocation(doc);
   if (!host) return '';
   const rule = findPlatform(DEFAULT_REGISTRY, normalizeHost(host), url);
   const selectors = rule?.platformHints?.statementSelectors;
@@ -197,6 +194,15 @@ function platformStatement(doc: Document, formulas: InlineFormulasOptions): stri
     if (parts.length) return parts.join('\n\n'); // first selector with content wins
   }
   return '';
+}
+
+/** The page's hostname and URL, '' for each when the document has no location. */
+function pageLocation(doc: Document): { host: string; url: string } {
+  try {
+    return { host: (doc as any).location?.hostname || '', url: (doc as any).location?.href || '' };
+  } catch {
+    return { host: '', url: '' };
+  }
 }
 
 /** Visible <h1..h3> headings, in document order, as a hierarchy outline. */
@@ -259,9 +265,12 @@ function extractCodeBlocks(doc: Document): string {
   };
 
   // <pre> and standalone <code> (skip <code> nested in <pre> — already captured).
-  doc.querySelectorAll('pre').forEach((el) => push(codeText(el)));
+  // A run result's input and output are not code: they go in RUN RESULT (#646).
+  doc.querySelectorAll('pre').forEach((el) => {
+    if (!isInRunResult(el)) push(codeText(el));
+  });
   doc.querySelectorAll('code').forEach((el) => {
-    if (!el.closest('pre')) push(codeText(el));
+    if (!el.closest('pre') && !isInRunResult(el)) push(codeText(el));
   });
 
   // Live editors. Monaco renders each line in .view-line; join with newlines.
@@ -321,7 +330,7 @@ function firstContentLine(text: string): string {
     const line = raw.trim();
     if (!line) continue;
     // Skip our own front-matter labels.
-    if (/^(TITLE|SELECTED TEXT|CODE ON PAGE|HEADINGS|FORMULAS)\b/.test(line)) continue;
+    if (/^(TITLE|SELECTED TEXT|LANGUAGE|CODE ON PAGE|RUN RESULT|HEADINGS|FORMULAS)\b/.test(line)) continue;
     if (line === '---') continue;
     return line.slice(0, 160);
   }
@@ -348,12 +357,21 @@ function tryReadability(
   return null;
 }
 
+/** Front-matter sections of a coding page besides its code (#646). */
+interface CodingFrontMatter {
+  /** The editor's language, as the editor names it. */
+  language?: string;
+  /** The RUN RESULT section (run-result.ts). */
+  runResult?: string;
+}
+
 /**
  * Build the final capped payload from front matter + body.
  *
- * Front matter (title, selection, headings) is NEVER trimmed; only the body is
- * trimmed from its end. If front matter alone exceeds the budget, it is hard-cut
- * (degenerate case — a 25k <title> is not a real page).
+ * Front matter (title, selection, code, run result, headings) is NEVER
+ * trimmed; only the body is trimmed from its end. If front matter alone
+ * exceeds the budget, it is hard-cut (degenerate case — a 25k <title> is not
+ * a real page).
  */
 function assemble(
   title: string,
@@ -366,13 +384,18 @@ function assemble(
   bodyCap?: number,
   /** Front-matter line saying some formulas could not be read. */
   formulasNote = '',
+  coding: CodingFrontMatter = {},
 ): { text: string; body: string } {
   const parts: string[] = [];
   if (title) parts.push(`TITLE: ${title}`);
   if (selection) parts.push(`SELECTED TEXT:\n${selection}`);
+  if (coding.language) parts.push(`LANGUAGE: ${coding.language}`);
   // Code goes in front matter (never trimmed) and is explicitly marked verbatim so
   // the model uses the EXACT signature/structure instead of inventing one.
   if (code) parts.push(`CODE ON PAGE (verbatim — use this exact structure, names, and signature):\n${code}`);
+  // The run result is short and the most specific thing on the page for a
+  // debugging question: a long statement must not push it out.
+  if (coding.runResult) parts.push(coding.runResult);
   if (formulasNote) parts.push(formulasNote);
   if (outline) parts.push(`HEADINGS:\n${outline}`);
   const frontMatter = parts.join('\n\n');
@@ -420,6 +443,8 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
   // Capture code BEFORE Readability runs (it mutates a clone, but we read the live
   // doc here so editor DOM is intact).
   const code = extractCodeBlocks(doc);
+  const { host, url } = pageLocation(doc);
+  const coding: CodingFrontMatter = { language: editorLanguage(doc), runResult: readRunResult(doc, host, url) };
 
   const readable = tryReadability(doc, deps.readabilityFactory, tokens.options());
   const readableLen = readable?.textContent ? readable.textContent.trim().length : 0;
@@ -442,6 +467,7 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
       limit,
       undefined,
       formulaGaps(selection) > 0 ? FORMULAS_NOTE : '',
+      coding,
     );
     return finishText(assembled.text, assembled.text ? 'selection' : 'empty', title, pageType, tokens, limit);
   }
@@ -464,11 +490,11 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
   const bodyCap = pageType === 'coding' ? CODING_BODY_CAP : undefined;
   const cappedLen = bodyCap != null ? Math.min(body.length, bodyCap) : body.length;
   const note = formulaGaps(selection) + formulaGaps(body.slice(0, cappedLen)) > 0 ? FORMULAS_NOTE : '';
-  let assembled = assemble(title, selection, outline, code, body, limit, bodyCap, note);
+  let assembled = assemble(title, selection, outline, code, body, limit, bodyCap, note, coding);
   // The note's own length can push every marker out of the body budget; then
   // nothing is missing from what is sent, and no image will be asked for.
   if (note && formulaGaps(selection) + formulaGaps(assembled.body) === 0) {
-    assembled = assemble(title, selection, outline, code, body, limit, bodyCap);
+    assembled = assemble(title, selection, outline, code, body, limit, bodyCap, '', coding);
   }
   return finishText(assembled.text, assembled.text ? source : 'empty', title, pageType, tokens, limit);
 }
