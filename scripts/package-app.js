@@ -210,6 +210,33 @@ const dmgJob = require('./lib/dmg-job.cjs');
 const runId = `${Date.now()}-${process.pid}`;
 process.env[dmgJob.RUN_ID_ENV] = runId;
 
+// macOS host only: offload release output + temporary staging (ditto,
+// create-dmg, @electron/notarize, electron-builder scratch) to external
+// storage when it is set up (see scripts/lib/external-build-storage.cjs).
+// ./release becomes a symlink to it, so electron-builder's default output and
+// every script that reads ./release (upload, release gate, publish) follow it
+// with no output override. Any target built on a Mac (--win/--linux too) gets
+// a dangling or opted-out ./release link cleaned up first. Windows and Linux
+// hosts are untouched.
+if (process.platform === 'darwin') {
+  const {
+    cleanupReleaseSymlink,
+    prepareExternalBuildStorage,
+  } = require('./lib/external-build-storage.cjs');
+  const repoRoot = path.join(__dirname, '..');
+  if (targetPlatform === 'darwin') {
+    const externalStorage = prepareExternalBuildStorage({ repoRoot });
+    if (externalStorage) {
+      process.env.TMPDIR = externalStorage.tmpDir;
+      console.log(
+        `[package-app] Using external build storage (macOS): release -> ${externalStorage.releaseDir}, TMPDIR=${externalStorage.tmpDir}`
+      );
+    }
+  } else {
+    cleanupReleaseSymlink(repoRoot);
+  }
+}
+
 let builderCode;
 try {
   applyDisguiseProductName();

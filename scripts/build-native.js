@@ -153,6 +153,23 @@ function checkOrReject(artifactPath, check) {
 
 if (os.platform() === 'darwin') {
   const { alignMachOStringTableFile } = require(path.join(__dirname, 'lib', 'macho-align-strtab.cjs'));
+  if (!process.env.CARGO_TARGET_DIR) {
+    // External build storage, scoped to this checkout (a worktree never
+    // shares Cargo output with another). native-link-checks.test.mjs reads
+    // the dylibs through the same resolveCargoTargetDir.
+    const { resolveCargoTargetDir } = require(path.join(__dirname, 'lib', 'external-build-storage.cjs'));
+    const extCargoTarget = resolveCargoTargetDir({ repoRoot: path.join(__dirname, '..'), env: process.env, platform: os.platform(), fsImpl: fs });
+    if (extCargoTarget) {
+      try {
+        fs.mkdirSync(extCargoTarget, { recursive: true });
+        process.env.CARGO_TARGET_DIR = extCargoTarget;
+        process.env.CARGO_BUILD_TARGET_DIR = extCargoTarget;
+        console.log(`[build-native] Using external SSD Cargo target dir: ${extCargoTarget}`);
+      } catch {
+        // Ignore and fall back to default target directory.
+      }
+    }
+  }
   const macTargets = buildAllMacTargets
     ? ['x86_64-apple-darwin', 'aarch64-apple-darwin']
     : [os.arch() === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'];
