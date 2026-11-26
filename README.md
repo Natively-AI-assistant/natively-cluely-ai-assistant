@@ -168,9 +168,9 @@ Every star pushes Natively higher in GitHub search, helping developers and job s
 
 ## Demo
 
-![Natively AI Assistant Demo - Real-time Interview Helper and Transcription](assets/natively-ai-meeting-assistant-demo.gif)
+![Natively product preview — meeting assistant overlay and transcription](assets/dashboard-preview.png)
 
-This demo shows **a complete live meeting scenario**:
+Natively covers **a complete live meeting scenario**:
 
 - Real-time transcription as the meeting happens
 - Rolling context awareness across multiple speakers
