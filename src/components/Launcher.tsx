@@ -1367,7 +1367,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                         exit={prefersReducedMotion
                             ? { opacity: 0, transition: { duration: 0.15, ease: 'linear' } }
                             : { x: 'calc(100% + 40px)', opacity: 0, filter: 'blur(2px)', transition: { x: { duration: 0.4, ease: [0.4, 0.2, 1, 0.8] }, opacity: { duration: 0.4, ease: [0.7, 0, 1, 1] }, filter: { duration: 0.4, ease: [0.7, 0, 1, 1] } } }}
-                        className={`fixed bottom-10 right-10 z-[2000] flex items-center gap-4 pl-4 pr-6 py-3.5 rounded-[18px] backdrop-blur-xl saturate-[180%] ring-1 ring-black/10 ${isLight ? 'bg-bg-elevated/90 border border-border-muted shadow-[0_8px_32px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-[#2A2A2E]/40 border border-white/10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.3),inset_0_-1px_0_rgba(255,255,255,0.05)]'}`}
+                        className={`fixed bottom-10 right-10 z-[2000] max-w-[340px] flex items-center gap-4 pl-4 pr-6 py-3.5 rounded-[18px] backdrop-blur-xl saturate-[180%] ring-1 ring-black/10 ${isLight ? 'bg-bg-elevated/90 border border-border-muted shadow-[0_8px_32px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-[#2A2A2E]/40 border border-white/10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.3),inset_0_-1px_0_rgba(255,255,255,0.05)]'}`}
                     >
                         {/* Liquid Icon Orb */}
                         <div className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-b from-blue-400/20 to-blue-600/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] border border-white/5">
@@ -1382,13 +1382,15 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                         {/* Text Content */}
                         <div className="flex flex-col gap-0.5">
                             <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">
-                                {notification === 'shown-while-mirrored' ? t('Your screen is mirrored')
-                                    : notification === 'shown-after-mirror' ? t('Hidden while your screen was mirrored')
+                                {notification === 'shown-while-mirrored' ? t('Screen mirrored')
+                                    : notification === 'shown-after-mirror' ? t('Mirroring ended')
                                     : t('Refreshed')}
                             </span>
                             <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">
-                                {notification === 'shown-while-mirrored' ? `${t('Natively shows on the other display too. To hide it, press')} ${(shortcuts.toggleVisibility ?? []).join(isMac ? '' : '+')}.`
-                                    : notification === 'shown-after-mirror' ? t('Extend your desktop to keep Natively on your screen.')
+                                {/* One short line, as "Synced with calendar": the toast keeps the
+                                    size of the app's other corner toasts (340px at most). */}
+                                {notification === 'shown-while-mirrored' ? `${(shortcuts.toggleVisibility ?? []).join(isMac ? '' : '+')} ${t('hides Natively')}`
+                                    : notification === 'shown-after-mirror' ? t('Natively was hidden')
                                     : t('Synced with calendar')}
                             </span>
                         </div>
