@@ -2022,7 +2022,8 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     // a quick overview…". User-written text belongs here anyway (§19.2), and
     // only the user's own instruction block follows it.
     input.standingSkills?.trim() ? push('standing_skills', standingSkillsSection(input.standingSkills)) : '',
-    input.answeringRules?.trim() ? push('answering_rules', answeringRulesSection(input.answeringRules)) : '',
+    // Heard turns only: the rules are how the user wants to SOUND; a typed question is the user asking the copilot.
+    input.answeringRules?.trim() && input.heardQuestion ? push('answering_rules', answeringRulesSection(input.answeringRules)) : '',
     listForm
       ? push('list_form', `<presentation_instruction note="Form for this question. Affects layout ONLY.">\n${listForm}\n</presentation_instruction>`)
       : '',

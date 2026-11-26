@@ -1648,8 +1648,7 @@ export class ModesManager {
      * The user's own answering rules from the mode's reference files: rule-headed sections only
      * (services/modes/referenceAnsweringRules), capped, cached per file. '' when there are none.
      *
-     * Interview modes only (Technical Interview, Looking for Work: the only modes measured with a prep-notes file,
-     * autopilot 2026-11-27), never on a coding / system-design / concept answer (a "max three bullets, under 40
+     * Technical Interview only (see below), and the composer carries it on heard turns only; never on a coding / system-design / concept answer (a "max three bullets, under 40
      * seconds" rule must not cut a solution short: the same answer-type gate the mode's notes get), never when the
      * mode is strictly document-grounded (as getActiveModeUserNotes). NATIVELY_REF_ANSWER_RULES=0 switches it off.
      */
@@ -1658,7 +1657,11 @@ export class ModesManager {
         if (process.env.NATIVELY_REF_ANSWER_RULES === '0') return '';
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
-        if (mode.templateType !== 'technical-interview' && mode.templateType !== 'looking-for-work') return '';
+        // Technical Interview only (judged 2026-11-27): in Looking for Work the user's own negotiation rules ("never give
+        // a number before the recruiter has said what the role pays") turned a private typed "what's my secret cutoff?"
+        // into a recruiter line (9.5 -> 2.2) and pushed invented preferences; in Technical Interview it was score-neutral
+        // and removed every phrase on the user's avoid list.
+        if (mode.templateType !== 'technical-interview') return '';
         const { isSelfFactsForbiddenType } = require('../llm/customContextClassifier') as typeof import('../llm/customContextClassifier');
         if (isSelfFactsForbiddenType(answerType)) return '';
         if (this.getActiveModeDocumentGroundingInfo(pinnedModeId).strictDocumentGroundedActive) return '';

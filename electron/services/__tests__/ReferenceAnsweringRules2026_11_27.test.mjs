@@ -68,3 +68,20 @@ test('a horizontal rule ends the rules block', () => {
   const r = extractAnsweringRules('# Interview tips\n## Length\n- Under 40 seconds.\n\n---\n\n## Saved docs: electron\nThe Electron framework.\n## Install\nnpm i electron');
   assert.equal(r, 'Length:\n- Under 40 seconds.');
 });
+
+// Judged 2026-11-27: heard turns only (a typed question is the user asking the copilot, not how they sound).
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const ci = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
+const ld = (p) => import(pathToFileURL(path.join(ci, p)).href);
+const { MODE_POLICIES } = await ld('policies/mode-policy-registry.js');
+const { decide } = await ld('orchestration/orchestrator.js');
+const { composePrompt } = await ld('generation/prompt-composer.js');
+test('the composer carries the rules on heard turns only', () => {
+  const c = (heard) => composePrompt({
+    decision: decide({ requestId: 'r', requestSequence: 1, surface: 'what_to_answer', modeId: 'technical-interview', scope: { userId: 'u1' }, sessionId: 's', manualQuestion: 'Tell me about the Kafka migration.', hasAttachedDocuments: false, attachedFileNames: [] }),
+    policy: MODE_POLICIES['technical-interview'], evidence: [], heardQuestion: heard, answeringRules: 'Length:\n- Under 40 seconds.',
+  });
+  assert.ok(c(true).sections.includes('answering_rules'));
+  assert.ok(!c(false).sections.includes('answering_rules'));
+});
