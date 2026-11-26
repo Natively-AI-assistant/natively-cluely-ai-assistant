@@ -273,6 +273,42 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       /* Reconnecting: the pill is a retry button. */
       .app[data-conn="reconnecting"] .conn { cursor: pointer; }
       .conn.is-pressed { transform: scale(0.96); }
+      /* Show / Hide Natively on the computer (#667): a pill like the
+         connection one, so its word is the state it changes to. Hidden until
+         the desktop first says whether it is showing. */
+      .vis {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 60px;
+        height: 30px;
+        padding: 0 14px;
+        border-radius: var(--r-pill);
+        background: var(--fill-1);
+        color: var(--label);
+        font-size: var(--type-footnote);
+        font-weight: 590;
+        letter-spacing: -0.005em;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        transition:
+          background-color var(--duration-fast) var(--ease-smooth-out),
+          opacity var(--duration-fast) var(--ease-smooth-out),
+          transform var(--duration-micro) var(--ease-out);
+      }
+      .vis[hidden] { display: none; }
+      .vis:disabled { opacity: 0.4; }
+      .vis[aria-busy="true"] { opacity: 0.6; }
+      .vis:not(:disabled):active, .vis.is-pressed { transform: scale(0.96); background: var(--fill-2); transition-duration: var(--duration-micro); }
+      /* Under 360 px (iPhone SE) the wordmark, the pill, the button and the
+         menu do not fit: while the button is shown (so while connected) the
+         pill keeps its green dot and says "Connected" to screen readers only. */
+      @media (max-width: 359px) {
+        .app[data-conn="live"][data-vis="shown"] .conn { padding: 0 11px; gap: 0; }
+        .app[data-conn="live"][data-vis="shown"] #connText {
+          position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+        }
+      }
       .conn-dot {
         flex: 0 0 auto;
         width: 7px;
@@ -1329,6 +1365,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           <span class="conn-dot" aria-hidden="true"></span>
           <span class="t-text-swap" id="connText">Connecting</span>
         </div>
+        <button class="vis" id="visBtn" type="button" hidden aria-busy="false">Hide</button>
         <button class="icon-btn" id="menuBtn" type="button" aria-label="More" aria-haspopup="menu" aria-expanded="false" aria-controls="menu">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>
         </button>
@@ -1864,7 +1901,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
         // Press feedback on pointer-down (iOS applies :active late or never).
         document.addEventListener('pointerdown', function (e) {
-          var t = e.target.closest && e.target.closest('.chip, .icon-btn, .send, .copy-btn');
+          var t = e.target.closest && e.target.closest('.chip, .icon-btn, .send, .copy-btn, .vis');
           if (!t || t.disabled) return;
           t.classList.add('is-pressed');
           var up = function () {
@@ -2697,6 +2734,65 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           recordingSynced = true;
           setRecording(!!ev.active, live);
         }
+
+        // ───── Show / Hide Natively on the computer (#667) ────────────────
+        // The desktop says whether Natively is on screen; the button offers
+        // the other state. A tap asks for that state (never a bare toggle, so
+        // a double tap cannot flip it back) and waits for the desktop to
+        // answer its id (replyTo), which it always does within 3 s (1.5 s,
+        // plus up to 1.5 s while a screenshot holds the tap), also when
+        // Cmd/Ctrl+B on the computer sent it the other way. Only a
+        // desktop gone silent reaches VIS_CONFIRM_MS. Desktops that never
+        // send the state keep the button hidden.
+        var visBtn = byId('visBtn');
+        var desktopVisible = null;   // null until the desktop says
+        var visPending = null;       // { target, id, timer } while a tap waits
+        var visSeq = 0;
+        var VIS_CONFIRM_MS = 4000;
+        // Shown only while connected: offline it could do nothing, and the
+        // pill's longer words (Reconnecting, Link expired) need the room.
+        function paintVisibility() {
+          var shown = desktopVisible !== null && conn === 'live';
+          visBtn.hidden = !shown;
+          app.dataset.vis = shown ? 'shown' : 'off';
+          if (!shown) return;
+          visBtn.textContent = desktopVisible ? 'Hide' : 'Show';
+          visBtn.setAttribute('aria-label', desktopVisible ? 'Hide Natively on your computer' : 'Show Natively on your computer');
+          visBtn.setAttribute('aria-busy', visPending ? 'true' : 'false');
+          visBtn.disabled = !!visPending;
+        }
+        function clearVisPending() {
+          if (!visPending) return;
+          clearTimeout(visPending.timer);
+          visPending = null;
+        }
+        function onVisibility(ev) {
+          desktopVisible = !!ev.visible;
+          var answered = visPending && (
+            (Array.isArray(ev.replyTo) && ev.replyTo.indexOf(visPending.id) >= 0) ||
+            visPending.target === desktopVisible);
+          if (answered) {
+            clearVisPending();
+            announce(desktopVisible ? 'Natively is showing on your computer' : 'Natively is hidden on your computer');
+          }
+          paintVisibility();
+        }
+        visBtn.addEventListener('click', function () {
+          if (desktopVisible === null || visPending) return;
+          var target = !desktopVisible;
+          var id = 'v' + (++visSeq) + '-' + Math.random().toString(36).slice(2, 8);
+          if (!sendCommand({ type: 'visibility', visible: target, id: id })) { showToast('Not connected to your desktop', true); return; }
+          visPending = {
+            target: target,
+            id: id,
+            timer: setTimeout(function () {
+              visPending = null;
+              paintVisibility();
+              showToast('Your computer did not respond', true);
+            }, VIS_CONFIRM_MS),
+          };
+          paintVisibility();
+        });
         // ───── Desktop screenshots ────────────────────────────────────────
         // The overlay's tray (what its next answer goes out with) arrives whole
         // on every change; a sent question's screenshots arrive once, as a row.
@@ -2848,6 +2944,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             case 'meeting': onMeeting(ev); break;
             case 'attachments': onAttachments(ev); break;
             case 'recording': onRecording(ev); break;
+            case 'visibility': onVisibility(ev); break;
             case 'images': onImages(ev); break;
             default: break;
           }
@@ -3269,6 +3366,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           imageBtn.setAttribute('aria-disabled', ok ? 'false' : 'true');
           sendBtn.disabled = !ok || !input.value.trim();
           input.placeholder = ok ? 'Ask anything' : 'Waiting for your desktop…';
+          if (!ok) clearVisPending();
+          paintVisibility();
         }
         function sendCommand(cmd) {
           if (!isLive()) return false;
@@ -3400,7 +3499,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
               chip.classList.remove('is-shaking');
               void chip.offsetWidth;   // replay on a second tap
               chip.classList.add('is-shaking');
-              showToast('Start a meeting on your Mac first');
+              showToast('Start a meeting on your computer first');
               return;
             }
             if (!sendCommand({ type: 'action', action: action })) { showToast('Not connected to your desktop', true); return; }

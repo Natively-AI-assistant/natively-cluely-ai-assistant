@@ -38,7 +38,7 @@ test('endMeeting enters launcher mode hidden while the notepad is open', () => {
 test('a hidden switchToLauncher shows nothing, owes the show, and does not activate the app', () => {
   const body = extractMethodBody(whSource, 'switchToLauncher');
   assert.match(body, /const hidden = !!opts\?\.hidden;/);
-  assert.match(body, /if \(hidden\) \{\s*this\.launcherShowOwed = true;\s*this\.isWindowVisible = false;\s*\} else if \(this\.launcherWindow/);
+  assert.match(body, /if \(hidden\) \{\s*this\.launcherShowOwed = true;\s*this\.setWindowVisible\(false\);\s*\} else if \(this\.launcherWindow/);
   assert.match(body, /!inactive &&\s*!hidden &&\s*!wasLauncher/);
   // The owed show still counts as leaving the overlay, so macOS activation runs then.
   assert.match(body, /const wasLauncher = this\.currentWindowMode === 'launcher' && !this\.launcherShowOwed;/);

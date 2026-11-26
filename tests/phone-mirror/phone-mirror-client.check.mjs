@@ -114,7 +114,7 @@ let failNextImage = false;
 // desktop lists in the overlay's tray (null: it never shows them there).
 // voice: the Answer action toggles a recording, as the overlay's Answer / Stop
 // does (off elsewhere: the other scenarios tap Answer and expect nothing).
-const desktop = { dropChatOnce: new Set(), ignoreActions: false, ignoreDetach: false, trayUploads: null, voice: null };
+const desktop = { dropChatOnce: new Set(), ignoreActions: false, ignoreDetach: false, ignoreVisibility: false, overrideVisibility: null, trayUploads: null, voice: null };
 // The overlay's tray as this fake desktop holds it; every change is reported
 // whole, as the overlay does.
 const desktopTray = [];
@@ -132,7 +132,20 @@ svc.setPhoneImageHandler(async (image) => {
   }
   return saved;
 });
+const visibilityCommands = [];
 svc.onPhoneCommand(async (cmd) => {
+  if (cmd.type === 'visibility') {
+    // Stands in for main's setVisibilityFromPhone: the window settles, then
+    // the relay reports it (#667).
+    visibilityCommands.push(cmd.visible);
+    if (desktop.ignoreVisibility) return;
+    await sleep(350);
+    // desktop.overrideVisibility: Cmd/Ctrl+B on the computer won the race;
+    // the request is still answered, with the state as it is.
+    const state = desktop.overrideVisibility ?? cmd.visible;
+    svc.setDesktopVisible(state, false, cmd.id ? [cmd.id] : undefined);
+    return;
+  }
   if (cmd.type === 'chat' && desktop.dropChatOnce.delete(cmd.message)) return;
   if (cmd.type === 'action' && cmd.action === 'answer' && desktop.voice) {
     const recording = !svc.recording;
@@ -592,6 +605,103 @@ async function recordingScenario(dev) {
   }
 }
 
+// Show / Hide Natively on the computer (#667). Every device shape: the bar
+// keeps the wordmark, connection pill, button and menu apart with the button
+// shown. The first device also taps it through: label, wait, double tap, a
+// second phone, a desktop that never answers.
+async function visibilityScenario(dev, full) {
+  const tag = `${dev.name}/visibility`;
+  svc.setDesktopVisible(true);
+  desktop.ignoreVisibility = false;
+  visibilityCommands.length = 0;
+  const browser = await launch(dev.engine);
+  const { ctx, page, errors } = await openPage(browser, dev, 'dark');
+  let toastBefore = false;
+  const btn = () => page.$eval('#visBtn', (n) => ({ hidden: n.hidden, text: n.textContent, label: n.getAttribute('aria-label'), busy: n.getAttribute('aria-busy'), disabled: n.disabled }));
+  try {
+    await page.waitForFunction(() => !document.getElementById('visBtn').hidden, null, { timeout: 2000 });
+    const shown = await btn();
+    check(tag, 'showing: the button reads Hide', shown.text === 'Hide' && shown.label === 'Hide Natively on your computer' && !shown.disabled, JSON.stringify(shown));
+    // While the pill eases to its label's width after connecting, the bar
+    // must fit on every frame, not only once it has settled.
+    const worst = await page.evaluate(() => new Promise((resolve) => {
+      const r = (id) => document.getElementById(id).getBoundingClientRect();
+      let overlap = 0; let frames = 0; const end = performance.now() + 700;
+      const tick = () => {
+        frames++;
+        overlap = Math.max(overlap, r('conn').right - r('visBtn').left, r('menuBtn').right - innerWidth, document.documentElement.scrollWidth - innerWidth);
+        if (performance.now() < end) requestAnimationFrame(tick); else resolve({ overlap, frames });
+      };
+      requestAnimationFrame(tick);
+    }));
+    check(tag, 'the bar fits on every frame while the pill settles after connecting', worst.overlap <= 0.5, JSON.stringify(worst));
+    await sleep(100);
+    const bar = await page.evaluate(() => {
+      const r = (id) => document.getElementById(id).getBoundingClientRect();
+      const brand = document.querySelector('.brand-mark').getBoundingClientRect();
+      return { vw: innerWidth, docW: document.documentElement.scrollWidth, brand: brand.right, connL: r('conn').left, connR: r('conn').right, visL: r('visBtn').left, visR: r('visBtn').right, menuL: r('menuBtn').left, menuR: r('menuBtn').right, connText: document.getElementById('connText').textContent, connTextW: r('connText').width };
+    });
+    check(tag, 'the bar fits: wordmark, pill, button and menu do not overlap', bar.brand <= bar.connL && bar.connR <= bar.visL && bar.visR <= bar.menuL && bar.menuR <= bar.vw && bar.docW <= bar.vw, JSON.stringify(bar));
+    check(tag, 'the pill still says Connected (visibly from 360 px, to screen readers below)', bar.connText === 'Connected' && (bar.vw < 360 ? bar.connTextW <= 1 : bar.connTextW > 20), JSON.stringify(bar));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${dev.name}-visibility.png`) });
+    if (!full) {
+      check(tag, 'no page errors', errors.length === 0, errors.join(' | '));
+      return;
+    }
+
+    // Tap Hide: it waits (disabled) for the desktop, then offers Show.
+    await page.click('#visBtn');
+    const waiting = await btn();
+    check(tag, 'tapped: the button waits for the desktop', waiting.disabled && waiting.busy === 'true', JSON.stringify(waiting));
+    await page.waitForFunction(() => document.getElementById('visBtn').textContent === 'Show', null, { timeout: 2000 });
+    const hidden = await btn();
+    check(tag, 'hidden: the button reads Show and is ready again', hidden.label === 'Show Natively on your computer' && !hidden.disabled && hidden.busy === 'false', JSON.stringify(hidden));
+    check(tag, 'the phone asked for a state (hidden), once', JSON.stringify(visibilityCommands) === '[false]', JSON.stringify(visibilityCommands));
+
+    // A quick double tap sends one request.
+    visibilityCommands.length = 0;
+    await page.evaluate(() => { const b = document.getElementById('visBtn'); b.click(); b.click(); });
+    await page.waitForFunction(() => document.getElementById('visBtn').textContent === 'Hide', null, { timeout: 2000 });
+    check(tag, 'a double tap sends one request', JSON.stringify(visibilityCommands) === '[true]', JSON.stringify(visibilityCommands));
+
+    // Changed on the desktop (Cmd/Ctrl+B there): every phone follows, and a
+    // phone that connects now reads the right word.
+    const second = await openPage(browser, dev, 'dark');
+    await second.page.waitForFunction(() => document.getElementById('visBtn').textContent === 'Hide', null, { timeout: 2000 });
+    svc.setDesktopVisible(false);
+    await page.waitForFunction(() => document.getElementById('visBtn').textContent === 'Show', null, { timeout: 2000 });
+    await second.page.waitForFunction(() => document.getElementById('visBtn').textContent === 'Show', null, { timeout: 2000 });
+    check(tag, 'a change on the desktop reaches both phones', true);
+    await second.ctx.close();
+
+    // Cmd/Ctrl+B on the computer wins the race: the phone's Show is answered
+    // with hidden. It stops waiting at once, says nothing, keeps Show.
+    desktop.overrideVisibility = false;
+    toastBefore = await page.$eval('#toast', (n) => n.classList.contains('is-open'));
+    const raceAt = Date.now();
+    await page.click('#visBtn');
+    await page.waitForFunction(() => !document.getElementById('visBtn').disabled, null, { timeout: 2000 });
+    const raced = await btn();
+    const raceToast = await page.$eval('#toast', (n) => n.classList.contains('is-open') && n.textContent);
+    check(tag, 'answered the other way: ready again at once, still Show, no toast', raced.text === 'Show' && Date.now() - raceAt < 1500 && !raceToast && !toastBefore, JSON.stringify({ raced, raceToast, ms: Date.now() - raceAt }));
+    desktop.overrideVisibility = null;
+
+    // A desktop that never answers: the button comes back with a word why.
+    desktop.ignoreVisibility = true;
+    await page.click('#visBtn');
+    await page.waitForFunction(() => !document.getElementById('visBtn').disabled, null, { timeout: 6000 });
+    const toast = await page.$eval('#toastText', (n) => n.textContent);
+    const after = await btn();
+    check(tag, 'no answer: the button is usable again and says so', toast === 'Your computer did not respond' && after.text === 'Show', JSON.stringify({ toast, after }));
+    check(tag, 'no page errors', errors.length === 0, errors.join(' | '));
+  } finally {
+    desktop.ignoreVisibility = false;
+    desktop.overrideVisibility = null;
+    await ctx.close();
+    await browser.close();
+  }
+}
+
 // Answers the desktop streams on its own (Auto Answer) or for a button, under
 // that button's label, several at once (2026-11-05 customer report: answers
 // showed on the laptop only).
@@ -959,7 +1069,7 @@ async function meetingStateScenario(dev, scheme) {
     await sleep(200);
     const settled = await page.$eval('.chip[data-action="recap"]', (n) => n.classList.contains('is-shaking'));
     check(tag, 'a denied tap shakes the button once, then clears for the next', shook === 't-input-shake' && !settled, JSON.stringify({ shook, settled }));
-    check(tag, 'tapping one says a meeting is needed, sends nothing', idleTap.toast === 'Start a meeting on your Mac first' && !idleTap.pending, JSON.stringify(idleTap));
+    check(tag, 'tapping one says a meeting is needed, sends nothing', idleTap.toast === 'Start a meeting on your computer first' && !idleTap.pending, JSON.stringify(idleTap));
     setDesktopTray([{ path: '/Users/someone/natively/screenshots/cap-x.png', thumb: 'data:image/jpeg;base64,/9j/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=' }]);
     await sleep(300);
     const withShot = await page.$$eval('.chip[data-needs-meeting]', (ns) => ns.some((n) => n.classList.contains('needs-meeting')));
@@ -1230,6 +1340,11 @@ if (!only || only === 'images') {
 if (!only || only === 'recording') {
   for (const dev of [DEVICES[1], DEVICES[3]]) {
     try { await recordingScenario(dev); } catch (e) { check(`${dev.name}/recording`, 'threw', false, e.message.split('\n')[0]); }
+  }
+}
+if (!only || only === 'visibility') {
+  for (const [i, dev] of DEVICES.entries()) {
+    try { await visibilityScenario(dev, i === 0 || dev.engine === chromium && i === 3); } catch (e) { check(`${dev.name}/visibility`, 'threw', false, e.message.split('\n')[0]); }
   }
 }
 if (!only || only === 'live') {

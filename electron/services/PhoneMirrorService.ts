@@ -82,7 +82,10 @@ export type StreamEvent =
   // The overlay's Speak button is recording the desktop mic (it reads Stop);
   // the phone's Speak chip mirrors it.
   | { type: 'recording'; active: boolean }
-  | { type: 'images'; id: string; images: PhoneAttachment[]; createdAt: string };
+  | { type: 'images'; id: string; images: PhoneAttachment[]; createdAt: string }
+  // Natively is on screen on the desktop. The phone's Show / Hide button
+  // reads it (#667). `replyTo` lists the phone requests this settles.
+  | { type: 'visibility'; visible: boolean; replyTo?: string[] };
 
 /**
  * A desktop screenshot as the phone sees it: an opaque id and a small JPEG/PNG
@@ -122,6 +125,8 @@ export type PhoneCommand =
   | { type: 'chat'; message: string }
   | { type: 'action'; action: string }
   | { type: 'screenshot' }
+  /** Show or hide Natively on the desktop, as Toggle Visibility does (#667). A state, not a toggle; `id` is answered in a later frame's replyTo. */
+  | { type: 'visibility'; visible: boolean; id?: string }
   /** Take a screenshot or photo off the overlay's tray (the phone names it by id; listeners get its path). */
   | { type: 'detach'; path: string };
 
@@ -278,6 +283,10 @@ export class PhoneMirrorService {
   private attachmentPaths: string[] = [];
   // The overlay's manual (Answer / Stop) recording, mirrored (see setRecording).
   private recording = false;
+  // The desktop's main window is on screen (#667). Null until main first
+  // reports it; a phone is then sent nothing and keeps its button hidden.
+  // Desktop state, not the server's: kept across stop/start.
+  private desktopVisible: boolean | null = null;
   private shots = new Map<string, PhoneAttachment & { fromPhone: boolean }>();
   private rateBuckets = new Map<string, { count: number; resetAt: number }>();
   private statusListeners = new Set<StatusListener>();
@@ -741,6 +750,21 @@ export class PhoneMirrorService {
     if (next === this.recording) return;
     this.recording = next;
     this.broadcast({ type: 'recording', active: next });
+  }
+
+  /**
+   * Whether Natively's main window is on screen (#667), for the phone's Show /
+   * Hide button. Repeats are not re-sent unless `force` or the frame answers
+   * phone requests (`replyTo`: their ids, so a phone stops waiting even when
+   * the state did not change). Tracked while stopped, so a phone that
+   * connects later reads the right label.
+   */
+  setDesktopVisible(visible: boolean, force = false, replyTo?: string[]): void {
+    const next = visible === true;
+    const replies = Array.isArray(replyTo) ? replyTo.filter((id) => typeof id === 'string' && id.length > 0) : [];
+    if (next === this.desktopVisible && !force && replies.length === 0) return;
+    this.desktopVisible = next;
+    this.broadcast({ type: 'visibility', visible: next, ...(replies.length ? { replyTo: replies } : {}) });
   }
 
   /** The screenshots in the overlay's tray, for a question typed on the phone (the overlay then clears it). */
@@ -2095,6 +2119,9 @@ export class PhoneMirrorService {
       ws.send(JSON.stringify({ type: 'attachments', items: this.attachments }));
       // Likewise, so a phone that reconnects never keeps reading Stop.
       ws.send(JSON.stringify({ type: 'recording', active: this.recording }));
+      if (this.desktopVisible !== null) {
+        ws.send(JSON.stringify({ type: 'visibility', visible: this.desktopVisible }));
+      }
     } catch (_) {
       /* client may be gone already */
     }
@@ -2167,6 +2194,9 @@ export class PhoneMirrorService {
           validated = { type: 'action', action: c.action };
         } else if (c.type === 'screenshot') {
           validated = { type: 'screenshot' };
+        } else if (c.type === 'visibility' && typeof c.visible === 'boolean') {
+          validated = { type: 'visibility', visible: c.visible };
+          if (typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(c.id)) validated.id = c.id;
         } else if (c.type === 'detach' && typeof c.id === 'string' && /^[0-9a-f-]{36}$/.test(c.id)) {
           // The phone only ever knows ids; the path stays on this side.
           const path = this.shotPath(c.id);
