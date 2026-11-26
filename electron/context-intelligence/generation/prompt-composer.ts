@@ -1590,7 +1590,7 @@ export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in th
  * surfaces), 0/5 typed and 2/5 on the hotkey (deepseek-flash); a question whose
  * story IS in the evidence stayed fully grounded (0/5 invented) with or without it.
  */
-function evidenceStoryGuard(d: Readonly<TurnDecision>, hasEvidence: boolean, ownWords = false, modeId?: string): string {
+function evidenceStoryGuard(d: Readonly<TurnDecision>, hasEvidence: boolean, ownWords = false, modeId?: string, heard = true): string {
   if (!hasEvidence || !d.claimRequirements.some((c) => /^USER_/.test(c.claimType))) return '';
   return '# A story from the evidence\nTell it only with what the evidence states'
     + (ownWords ? ' and what the user wrote about themselves' : '')
@@ -1598,7 +1598,10 @@ function evidenceStoryGuard(d: Readonly<TurnDecision>, hasEvidence: boolean, own
     + 'and outcomes. Do not add a stakeholder, a disagreement, a colleague, a reaction or a result the evidence does not '
     + 'name. If the evidence holds no story of the kind asked, say how the user handles that kind of situation, and '
     + 'mention a real project only for what the evidence says about it.'
-    + (modeId && OWN_LIFE_MODES.has(modeId) ? BEYOND_THE_RECORD : '');
+    // Heard turns only (judged 2026-11-27): a typed question is the user asking the copilot about their own record, and
+    // "never say a detail is not written down" made it invent a stance ("same as with a counteroffer, I'd pass") where
+    // the user needed to hear that their notes do not cover it.
+    + (modeId && OWN_LIFE_MODES.has(modeId) && heard ? BEYOND_THE_RECORD : '');
 }
 
 /**
@@ -2004,7 +2007,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
         + `\n${input.conversationSummary}`)
       : '',
     push('today', todayNotice(input.now ?? new Date(), d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
-    push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock), hasOwnWords, policy.id)),
+    push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock), hasOwnWords, policy.id, Boolean(input.heardQuestion))),
     push('personal_commitment', commitmentNotice),
     push('calculation', calculationNotice(d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
     push('refinement', refinementNotice(d.resolvedQuestion, input.conversationSummary, input.heardQuestion === true)),
