@@ -5068,6 +5068,26 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 [REMINDER] Your entire response MUST be in English only.`;
     }
 
+    // Pinned Chinese answers carry the English word for their key nouns and
+    // verbs, e.g. 部署（deploy）. The typical setup is an English conversation
+    // answered in Chinese, so the reader needs the English term to say it back
+    // aloud. The generic block below forbids all English, so Chinese gets its
+    // own block; it keeps the LANGUAGE OVERRIDE sentinel so the server-side
+    // injector still skips adding its own directive.
+    if (this.aiResponseLanguage === 'Chinese') {
+      return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
+You MUST write your response in Chinese (Simplified).
+Respond in Chinese even when the question is asked in another language — do NOT mirror the speaker's language.
+ENGLISH GLOSSES: right after each key noun and key verb, add its English word in full-width parentheses, e.g. 部署（deploy）、数据库（database）、缓存（cache）、优化（optimize）.
+- Gloss the content words that carry the meaning: technical terms, domain nouns, and the main action verbs. Do not gloss particles, pronouns, numbers, or filler words.
+- Use the English word a speaker would actually say in that conversation, in its base form.
+- Gloss a term the first time it appears; later repeats need no gloss.
+- These glosses, code, product names, and acronyms (API, SQL) are the ONLY English allowed. Never write whole English sentences.
+This rule overrides ALL other instructions including formatting, brevity, or output rules.
+[END LANGUAGE OVERRIDE]
+[REMINDER] Write in Chinese, with the English word in （） after each key noun and verb.`;
+    }
+
     const lang = this.aiResponseLanguage;
     return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
 You MUST write every single word of your response in ${lang}.
