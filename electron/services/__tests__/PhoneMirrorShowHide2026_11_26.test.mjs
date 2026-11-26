@@ -513,15 +513,28 @@ function windowHelperFixture(platform) {
     require: (name) => {
       if (name === 'electron') return { app: { isPackaged: false }, BrowserWindow: {}, screen: {} };
       if (name.startsWith('node:') || name === 'path' || name === 'fs' || name === 'os') return require(name);
+      if (name.endsWith('KeybindManager')) return { KeybindManager: { getInstance: () => ({ setMode() {} }) } };
       return {};
     },
   });
   const ops = [];
   const fakeWindow = (name) => ({
+    minimized: false,
+    handlers: {},
+    on(event, fn) { this.handlers[event] = fn; },
     isDestroyed: () => false,
+    isVisible: () => true,
+    isMinimized() { return this.minimized; },
+    restore() { ops.push(`${name}.restore`); this.minimized = false; },
+    show: () => ops.push(`${name}.show`),
+    showInactive: () => ops.push(`${name}.showInactive`),
+    focus: () => {},
+    setContentProtection: () => {},
     hide: () => ops.push(`${name}.hide`),
     setOpacity: (v) => ops.push(`${name}.opacity=${v}`),
   });
+  // Anything else switchToLauncher asks AppState: a no-op that says "no".
+  const appState = new Proxy({}, { get: () => () => false });
   const helper = Object.create(module.exports.WindowHelper.prototype);
   Object.assign(helper, {
     isWindowVisible: true,
@@ -534,6 +547,9 @@ function windowHelperFixture(platform) {
     applyOverlayAuxVisibility() {},
     syncOverlayAuxVisibility() {},
     lastOverlayUiState: null,
+    currentWindowMode: 'launcher',
+    appState,
+    contentProtection: false,
   });
   return { helper, ops };
 }
@@ -565,6 +581,51 @@ for (const platform of ['darwin', 'win32']) {
       helper.setOverlayUiState({ expanded: false, shellWide: true });
       helper.setOverlayUiState({ expanded: true });
       assert.deepEqual(heard, [true, true]);
+    });
+
+    // Review 2026-11-26 (pre-existing): these hid Natively but left the flag
+    // at "shown", so Cmd/Ctrl+B needed two presses and the phone offered Hide.
+    test('closing the overlay mid-meeting (Cmd+W / Alt+F4: hideOverlay) reports hidden in overlay mode only', () => {
+      const { helper, ops } = windowHelperFixture(platform);
+      const heard = [];
+      helper.onVisibilityChange((v) => heard.push(v));
+      helper.currentWindowMode = 'overlay';
+      helper.hideOverlay();
+      assert.ok(ops.includes('overlay.hide'));
+      assert.equal(helper.isVisible(), false);
+      assert.deepEqual(heard, [false]);
+      const other = windowHelperFixture(platform).helper;   // launcher mode: the launcher owns the flag
+      other.hideOverlay();
+      assert.equal(other.isVisible(), true);
+    });
+
+    test('a minimized launcher reports hidden, a restored one shown; overlay mode leaves the flag alone', () => {
+      const { helper } = windowHelperFixture(platform);
+      const heard = [];
+      helper.onVisibilityChange((v) => heard.push(v));
+      const win = helper.launcherWindow;
+      helper.trackLauncherMinimize(win);
+      win.minimized = true; win.handlers.minimize();
+      assert.equal(helper.isVisible(), false);
+      win.minimized = false; win.handlers.restore();
+      assert.equal(helper.isVisible(), true);
+      assert.deepEqual(heard, [false, true]);
+      helper.currentWindowMode = 'overlay';
+      win.handlers.minimize();
+      assert.equal(helper.isVisible(), true, 'overlay mode: not the launcher\'s flag');
+    });
+
+    test(`showing a minimized launcher ${platform === 'darwin' ? 'restores it first' : 'leaves the restore to showInactive (no restore(): it would take focus)'}`, () => {
+      const { helper, ops } = windowHelperFixture(platform);
+      helper.launcherWindow.minimized = true;
+      helper.isWindowVisible = false;
+      helper.switchToLauncher(true);
+      const restoreAt = ops.indexOf('launcher.restore');
+      const showAt = ops.indexOf('launcher.showInactive');
+      assert.ok(showAt >= 0, ops.join(','));
+      if (platform === 'darwin') assert.ok(restoreAt >= 0 && restoreAt < showAt, ops.join(','));
+      else assert.equal(restoreAt, -1, ops.join(','));
+      assert.equal(helper.isVisible(), true);
     });
 
     test('a listener that throws does not break the hide', () => {

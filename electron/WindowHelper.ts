@@ -1270,6 +1270,8 @@ export class WindowHelper {
       });
     }
 
+    this.trackLauncherMinimize(this.launcherWindow);
+
     this.launcherWindow.on('closed', () => {
       this.cancelLauncherResizeAnimation();
       this.appState.recordNativeOomTrace('launcher-window-closed', { window: 'launcher' });
@@ -1412,6 +1414,25 @@ export class WindowHelper {
     if (this.isWindowVisible === visible) return;
     this.isWindowVisible = visible;
     this.notifyVisibilityListener();
+  }
+
+  /**
+   * A minimized launcher is off screen: Toggle Visibility (Cmd/Ctrl+B), the
+   * dock click and the phone's Show / Hide (#667) read the visibility flag.
+   * Left at "shown", the first Cmd/Ctrl+B only hid a window already gone and
+   * the phone offered Hide. Both platforms: the in-app minimize button,
+   * Cmd+M, Win+Down and the taskbar all end in 'minimize', and the dock or
+   * taskbar restore comes back through 'restore'. Launcher mode only: in
+   * overlay mode the launcher is hidden anyway and the overlay owns the flag.
+   */
+  private trackLauncherMinimize(win: BrowserWindow): void {
+    win.on('minimize', () => {
+      if (this.currentWindowMode === 'launcher') this.setWindowVisible(false);
+    });
+    win.on('restore', () => {
+      if (this.currentWindowMode !== 'launcher' || win.isDestroyed()) return;
+      if (!win.isMinimized()) this.setWindowVisible(true);
+    });
   }
 
   private notifyVisibilityListener(): void {
@@ -2443,6 +2464,12 @@ export class WindowHelper {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
     }
+    // In overlay mode the overlay is the main window: it is gone now. Left at
+    // "shown", the first Cmd/Ctrl+B only collapsed the hidden overlay and the
+    // phone (#667) offered Hide. With it cleared, Cmd/Ctrl+B takes the
+    // "hidden but expanded" path in AppState.toggleMainWindow and shows it
+    // as it was, in one press.
+    if (this.currentWindowMode === 'overlay') this.setWindowVisible(false);
   }
 
   /**
@@ -2886,6 +2913,13 @@ export class WindowHelper {
       this.setWindowVisible(false);
     } else if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
       this.launcherShowOwed = false;
+      // Minimized (the in-app button, Cmd+M): show() and showInactive() do
+      // not reliably bring a miniaturized window back on macOS, so restore it
+      // first and one Cmd+B is enough. Not on Windows: there show() and
+      // showInactive() (SW_SHOWNOACTIVATE) already restore a minimized
+      // window, and restore() would activate it, taking focus from the
+      // user's app on a ghost show.
+      if (process.platform === 'darwin' && this.launcherWindow.isMinimized()) this.launcherWindow.restore();
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first
         this.launcherWindow.setOpacity(0);
