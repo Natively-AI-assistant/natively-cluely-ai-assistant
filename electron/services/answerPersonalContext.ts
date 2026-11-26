@@ -19,6 +19,8 @@ export interface AnswerPersonalContext {
   modeNotes?: string;
   /** Skills switched to "Use in every answer", rendered. */
   standingSkills?: string;
+  /** Rule-headed sections of the mode's reference files (autopilot 2026-11-27). */
+  answeringRules?: string;
 }
 
 export interface AnswerPersonalContextOptions {
@@ -126,6 +128,12 @@ export function personalContextForAnswers(opts: AnswerPersonalContextOptions = {
     const notes = ModesManager.getInstance().getActiveModeUserNotes(opts.answerType, opts.modeId ?? undefined);
     if (notes) out.modeNotes = notes;
   } catch { /* mode notes unavailable */ }
+  try {
+    const { ModesManager } = require('./ModesManager') as typeof import('./ModesManager');
+    // V3 composer only (answeringRulesSection); the legacy block above leaves it out (not measured there).
+    const rules = ModesManager.getInstance().getActiveModeAnsweringRules(opts.answerType, opts.modeId ?? undefined);
+    if (rules) out.answeringRules = rules;
+  } catch { /* answering rules unavailable */ }
   try {
     const { SkillsManager } = require('./SkillsManager') as typeof import('./SkillsManager');
     const block = SkillsManager.getInstance().getAlwaysOnPromptBlock(opts.explicitSkillId ?? undefined);

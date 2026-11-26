@@ -1644,6 +1644,47 @@ export class ModesManager {
      * selectCustomContextFactsForAnswer); empty for a strictly
      * document-grounded mode, whose answers come from its files.
      */
+    /**
+     * The user's own answering rules from the mode's reference files: rule-headed sections only
+     * (services/modes/referenceAnsweringRules), capped, cached per file. '' when there are none.
+     *
+     * Interview modes only (Technical Interview, Looking for Work: the only modes measured with a prep-notes file,
+     * autopilot 2026-11-27), never on a coding / system-design / concept answer (a "max three bullets, under 40
+     * seconds" rule must not cut a solution short: the same answer-type gate the mode's notes get), never when the
+     * mode is strictly document-grounded (as getActiveModeUserNotes). NATIVELY_REF_ANSWER_RULES=0 switches it off.
+     */
+    private answeringRulesCache = new Map<string, { key: string; rules: string }>();
+    public getActiveModeAnsweringRules(answerType?: AnswerType, pinnedModeId?: string): string {
+        if (process.env.NATIVELY_REF_ANSWER_RULES === '0') return '';
+        const mode = this.resolveMode(pinnedModeId);
+        if (!mode) return '';
+        if (mode.templateType !== 'technical-interview' && mode.templateType !== 'looking-for-work') return '';
+        const { isSelfFactsForbiddenType } = require('../llm/customContextClassifier') as typeof import('../llm/customContextClassifier');
+        if (isSelfFactsForbiddenType(answerType)) return '';
+        if (this.getActiveModeDocumentGroundingInfo(pinnedModeId).strictDocumentGroundedActive) return '';
+        const { extractAnsweringRules, ANSWERING_RULES_MAX_CHARS } = require('./modes/referenceAnsweringRules') as typeof import('./modes/referenceAnsweringRules');
+        const parts: string[] = [];
+        let used = 0;
+        for (const file of this.getReferenceFiles(mode.id)) {
+            const content = file.content || '';
+            if (!content.trim()) continue;
+            // A file's content does not change under its id (a re-upload is a new file); length guards the rest.
+            // Cheap on purpose: this runs on every answer and a prep file can be 2 MB.
+            const key = `${file.createdAt}|${content.length}`;
+            let hit = this.answeringRulesCache.get(file.id);
+            if (!hit || hit.key !== key) {
+                hit = { key, rules: extractAnsweringRules(content) };
+                this.answeringRulesCache.set(file.id, hit);
+            }
+            if (!hit.rules) continue;
+            const room = ANSWERING_RULES_MAX_CHARS - used;
+            if (room < 200) break;
+            const r = hit.rules.length <= room ? hit.rules : extractAnsweringRules(content, room);
+            if (r) { parts.push(r); used += r.length; }
+        }
+        return parts.join('\n\n');
+    }
+
     public getActiveModeUserNotes(answerType?: AnswerType, pinnedModeId?: string): string {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
