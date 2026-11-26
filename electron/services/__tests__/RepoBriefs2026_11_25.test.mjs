@@ -311,6 +311,55 @@ describe('which part of a brief a question gets', () => {
     assert.match(sel('What does addOrderItems do?').text, /`addOrderItems` \[backend\/controllers\/orderController\.js:7-38\]/);
     assert.match(sel('walk me through the create product review function').text, /`createProductReview` \[backend\/controllers\/productController\.js:113-149\]/);
   });
+  test('a general technical question is not read as one about the repository', () => {
+    // Live 2026-11-26: "how do you set up JWT" pulled microblog's setUp, "how
+    // do devices connect" pulled SonyConnect, "how would you build..." passed
+    // as past work. The answers were still fine, but each carried ~8k
+    // characters of unrelated code.
+    for (const q of [
+      'How do you generate token strings that cannot be guessed?', // generateToken said aloud: two everyday words
+      'How do you write an error handler in Express?', // errorHandler
+      'How would you secure the API?', // "the API" is not "your API"
+      'How would you structure the code for a large app?',
+      'How would you build product reviews so a user can only review a product once?', // hypothetical, not past work
+    ]) assert.equal(sel(q).text, '', q);
+  });
+  test('an everyday word of the repository name does not name it; the whole name or a distinctive word does', () => {
+    const sony = { entry: { ...readyProshop.entry, key: 'someone/sonyconnect', repo: 'SonyConnect', projectName: undefined }, result: PROSHOP };
+    const s = (q) => ctx.selectRepoContext(q, [sony]).text;
+    for (const q of ['What is Bluetooth Low Energy and how do devices connect?', 'How would you connect a React frontend to a REST backend?']) {
+      assert.equal(s(q), '', q);
+    }
+    for (const q of ['Tell me about SonyConnect', 'Tell me about Sony Connect', 'How does the Sony app pair with headphones?']) {
+      assert.match(s(q), /^## bradtraversy\/proshop_mern/, q);
+    }
+  });
+  test('confidence: a named project, function or follow-up is sure; an unnamed "how did you" is a possible match', async () => {
+    assert.doesNotMatch(sel('Tell me about your ProShop project').text, /Possible match/);
+    assert.doesNotMatch(sel('What does addOrderItems do?').text, /Possible match/);
+    const unnamed = sel('How did you stop users from reviewing the same product twice?').text;
+    assert.match(unnamed, /^## bradtraversy\/proshop_mern[^\n]*\n\nPossible match: the question does not name this project\./);
+    ctx.resetConversationMemoryForTests();
+    const s = { fetchLines: undefined, sessionId: 'sure' };
+    await ctx.buildRepoContext('What does addOrderItems do?', [readyProshop], s);
+    assert.doesNotMatch(await ctx.buildRepoContext('Why did you do it that way?', [readyProshop], s), /Possible match/, 'a follow-up on a named question stays sure');
+    assert.equal(ctx.matchConfidence(6, false), 'sure');
+    assert.equal(ctx.matchConfidence(1, false), 'possible');
+    assert.equal(ctx.matchConfidence(1, true), 'sure');
+  });
+  test('a named project whose brief does not cover the question: a note to answer anyway, at the data', () => {
+    // Live 2026-11-26: "Microblog doesn't have rate limiting", "I didn't run a
+    // formal load test" with only the prompt rule.
+    for (const q of ['In ProShop, how did you handle rate limiting on the API?', 'In your ProShop project, how did you load test it?']) {
+      assert.match(sel(q).text, /\n\nNot in this brief: no part below is directly about what was asked\./, q);
+    }
+    for (const q of ['In ProShop, how does PayPal payment mark the order as paid?', 'Tell me about your ProShop project', 'What does addOrderItems do?']) {
+      assert.doesNotMatch(sel(q).text, /Not in this brief/, q);
+    }
+  });
+  test('a short function name still counts when typed as an identifier', () => {
+    assert.match(sel('What does generateToken do?').text, /generateToken/);
+  });
   test('stays inside the budget', () => {
     for (const q of ['What does addOrderItems do?', 'How did you handle authentication in your project?', 'What would you improve in the proshop code?']) {
       assert.ok(ctx.selectRepoContext(q, [readyProshop], 6000).text.length <= 6000 + 400, q);
@@ -456,6 +505,46 @@ describe('the answer prompt', async () => {
       assert.ok(!r.system.includes('orderController'), 'repository text never enters the system prompt');
       const unrelated = await turn('Implement an LRU cache in Python');
       assert.doesNotMatch(unrelated.user, /own code repositories/);
+    } finally {
+      repoBriefIndex.setRepoBriefManagerForTests(null);
+    }
+  });
+  test('the repository section never makes the answer a refusal', async () => {
+    // Live 2026-11-26: "Microblog doesn't have rate limiting on the API", "I
+    // haven't run load tests against it, so I can't give you numbers".
+    const { codeReposSection } = await load('context-intelligence/generation/prompt-composer.js');
+    const t = codeReposSection('## a/b at commit 1234567, read in full');
+    assert.match(t, /Always answer the question that was asked; never refuse it/);
+    assert.match(t, /answer fully from general knowledge as how the user would do it/);
+    assert.match(t, /do not claim the code does it, and do not claim the user never did it/);
+    assert.match(t, /Open with the answer itself, never with what the project lacks/);
+    assert.match(t, /"Possible match" was not named in the question: use it only where it clearly fits/);
+    assert.doesNotMatch(t, /State only what this shows|say what it does show/);
+  });
+  test('a repository that does not cover the question: the answer shape right after the question, on every path', async () => {
+    // Live 2026-11-26: with the rule only inside code_repos, every such answer
+    // opened "Rate limiting isn't something I built into Microblog's API".
+    const composer = await load('context-intelligence/generation/prompt-composer.js');
+    assert.ok(ctx.NOT_COVERED_NOTE.startsWith(composer.REPO_NOT_COVERED_MARK), 'the note and the mark the composer looks for agree');
+    const m = managerWith(scriptedClient({ request: () => ({ id: 'j', status: 'ready', result: PROSHOP }), status: () => null }));
+    m.add('github.com/bradtraversy/proshop_mern', { projectName: 'ProShop eCommerce' });
+    await m.kick();
+    repoBriefIndex.setRepoBriefManagerForTests(m);
+    try {
+      const r = await turn('In ProShop, how did you handle rate limiting on the API?');
+      const q = r.user.indexOf('# Question'), shape = r.user.indexOf('# Answering about a feature the project');
+      assert.ok(q > 0 && shape > q, 'the shape follows the question');
+      assert.match(r.user, /Open with the approach itself\./);
+      assert.match(r.user, /Say nothing about whether the project has it or whether the user built it/);
+      assert.match(r.user, /WRONG: "Pagination isn't something I built into Taskboard's API/);
+      assert.match(r.user, /never say the code uses, has or does something the brief does not show/);
+      assert.doesNotMatch(r.user, /present tense/, 'present tense drew invented claims about the code');
+      const covered = await turn('In ProShop, how does PayPal payment mark the order as paid?');
+      assert.match(covered.user, /# The user's own code repositories/);
+      assert.doesNotMatch(covered.user, /# Answering about a feature/, 'a covered question keeps its prompt');
+      const { codeReposBlockForAnswers } = await load('services/answerPersonalContext.js');
+      assert.match(await codeReposBlockForAnswers('In ProShop, how did you handle rate limiting on the API?'), /# The user's own code repositories[\s\S]*# Answering about a feature the project/);
+      assert.doesNotMatch(await codeReposBlockForAnswers('What does addOrderItems do in your ProShop project?'), /# Answering about a feature/);
     } finally {
       repoBriefIndex.setRepoBriefManagerForTests(null);
     }
