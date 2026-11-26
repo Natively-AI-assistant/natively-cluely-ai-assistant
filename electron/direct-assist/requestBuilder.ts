@@ -1,6 +1,6 @@
 import { DirectAssistError } from './errors';
 import { DIRECT_ASSIST_PROVIDERS } from './types';
-import { getModelCapabilities } from '../llm/modelCapabilities';
+import { getModelCapabilities, hasAssumedContextWindow, ollamaRequestContext } from '../llm/modelCapabilities';
 // The shared diagram modules are required at the point of use (see
 // diagramModules below): LLMHelper imports this file statically, and the
 // per-file tsc trees two test suites build do not emit `.mjs` modules that
@@ -31,9 +31,25 @@ A reference file marked TRUNCATED is cut off: the rest of that file is not avail
  */
 export const DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER = 'CURRENT TURN SPEECH (PART OF CURRENT REQUEST):';
 
-const DEFAULT_MAX_CONTEXT_CHARS = 64_000;
 const MIN_MAX_CONTEXT_CHARS = 1_024;
 const MAX_MAX_CONTEXT_CHARS = 1_000_000;
+/**
+ * The most of one chat message the Natively API passes to its model:
+ * natively-api /v1/chat keeps the first DEEPSEEK_MSG_CHAR_CAP characters of
+ * every message (lib/deepseekProvider.js, 100 000) and drops the rest without
+ * an error. Direct Assist sends its whole user prompt as one message with the
+ * CURRENT REQUEST last, so a longer prompt reaches the model without the
+ * question. Measured live (#795): at ~190 000 chars the answers were "the
+ * request itself didn't come through". Keep in step with the server.
+ */
+export const NATIVELY_API_MESSAGE_CHAR_CAP = 100_000;
+/**
+ * The budget for a model whose window the app only assumes (a custom endpoint,
+ * a gateway model no table lists, with no window reported). It was every
+ * model's default before #795; sizing such a model to the assumed 128k cloud
+ * window would send a 32k model behind a custom endpoint a prompt it rejects.
+ */
+const ASSUMED_WINDOW_MAX_CONTEXT_CHARS = 64_000;
 
 const LANGUAGE_PATTERNS: readonly [string, RegExp][] = [
   ['C++', /(?:\bin\s+|\busing\s+|\bwrite(?:\s+it)?\s+in\s+|\bsolve(?:\s+it)?\s+in\s+)?c\s*\+\s*\+/i],
@@ -465,7 +481,6 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
   const requestedFormat = detectRequestedFormat(input.currentRequest)
     ?? explicitFormat
     ?? detectLatest(transcriptText, FORMAT_PATTERNS);
-  const requestedMax = Number.isFinite(input.maxContextChars) ? Number(input.maxContextChars) : DEFAULT_MAX_CONTEXT_CHARS;
   const capabilityModel = input.selection.provider === 'antigravity'
     ? input.selection.model.replace(/^antigravity:/, '')
     : input.selection.provider === 'litellm'
@@ -480,15 +495,41 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
       // strips the vendor segment and every OpenRouter model would resolve as an
       // unknown text-only route.
       : input.selection.model;
-  const capabilities = getModelCapabilities(capabilityModel, input.selection.provider === 'ollama');
+  const isOllama = input.selection.provider === 'ollama';
+  const capabilities = getModelCapabilities(capabilityModel, isOllama);
+  // The window the prompt really goes into. Ollama runs at the num_ctx Natively
+  // asks for, not the model's native window (a 128k llama3.1 gets 16k), and its
+  // adapter cuts anything larger from the oldest line, mid reference block. A
+  // gateway may have reported a smaller ceiling than the cloud tier assumes.
+  // Either only ever lowers the capability table's number.
+  const reportedWindow = typeof input.contextWindowTokens === 'number'
+    && Number.isFinite(input.contextWindowTokens) && input.contextWindowTokens > 0
+    ? Math.floor(input.contextWindowTokens)
+    : Number.POSITIVE_INFINITY;
+  const contextTokens = Math.min(
+    capabilities.maxContextTokens,
+    isOllama ? ollamaRequestContext(capabilityModel) : Number.POSITIVE_INFINITY,
+    reportedWindow,
+  );
   // Leave the provider's output budget plus a fixed system/serialization reserve.
   const modelInputChars = Math.max(
     MIN_MAX_CONTEXT_CHARS,
-    (capabilities.maxContextTokens - capabilities.outputBudgetTokens - 1_000) * 4,
+    (contextTokens - capabilities.outputBudgetTokens - 1_000) * 4,
   );
+  // No bound from the caller means the model's own input window. A fixed
+  // 64 000-char default used to cap every model at ~16k tokens, so on a 128k+
+  // model a mode's reference files arrived cut to an equal share each (#795).
+  // Where that window is only assumed, the old bound stays.
+  const windowIsAssumed = hasAssumedContextWindow(capabilities) && reportedWindow === Number.POSITIVE_INFINITY;
+  const requestedMax = Number.isFinite(input.maxContextChars)
+    ? Number(input.maxContextChars)
+    : windowIsAssumed ? ASSUMED_WINDOW_MAX_CONTEXT_CHARS : Number.POSITIVE_INFINITY;
+  const providerMessageCap = input.selection.provider === 'natively'
+    ? NATIVELY_API_MESSAGE_CHAR_CAP
+    : Number.POSITIVE_INFINITY;
   const maxContextChars = Math.max(
     MIN_MAX_CONTEXT_CHARS,
-    Math.min(MAX_MAX_CONTEXT_CHARS, modelInputChars, Math.floor(requestedMax)),
+    Math.min(MAX_MAX_CONTEXT_CHARS, modelInputChars, providerMessageCap, Math.floor(requestedMax)),
   );
 
   const skill = input.skill && typeof input.skill.instructions === 'string' && input.skill.instructions.trim()
@@ -507,7 +548,13 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     skill,
     manualContext: typeof input.manualContext === 'string' ? input.manualContext : '',
     referenceContext: typeof input.referenceContext === 'string' ? input.referenceContext : '',
-    referenceFiles: boundReferenceFiles(input.referenceFiles, maxContextChars),
+    // The reference set never gets more than its own ceiling, so neither may
+    // any one file; bounding by the (now window-sized) prompt budget alone
+    // kept 2 000+ files of up to 490 000 chars for the fitting loop to walk.
+    referenceFiles: boundReferenceFiles(
+      input.referenceFiles,
+      Math.min(maxContextChars, DIRECT_ASSIST_REFERENCE_CONTEXT_MAX_CHARS),
+    ),
     pageContext: freezePageContext(input.pageContext),
     history: freezeHistory(input.history),
     transcript: typeof input.transcript === 'string' ? input.transcript : '',
@@ -519,7 +566,7 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     maxContextChars,
     // What the system prompt may use: the 1,000-token reserve above is part of
     // the model's input, not extra room.
-    modelInputChars: Math.max(MIN_MAX_CONTEXT_CHARS, (capabilities.maxContextTokens - capabilities.outputBudgetTokens) * 4),
+    modelInputChars: Math.max(MIN_MAX_CONTEXT_CHARS, (contextTokens - capabilities.outputBudgetTokens) * 4),
     smallModel: capabilities.tier === 'local-small',
   });
 }

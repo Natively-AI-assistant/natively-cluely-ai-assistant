@@ -1038,6 +1038,9 @@ test('a big reference set cannot crowd the live transcript out of the prompt', a
     source: 'typed',
     referenceFiles: [{ fileName: 'huge.md', content: 'H'.repeat(300_000) }],
     meetingTranscript: transcript,
+    // The default budget is now the model's window (#795); the sharing under
+    // pressure this guards needs a budget both fields overflow.
+    maxContextChars: 64_000,
   }));
 
   assert.deepEqual(prepared.trimmedFields, []);
@@ -1082,6 +1085,7 @@ test('XML-escaping expansion is re-aimed, not paid for by sacrificing a whole fi
     source: 'typed',
     referenceFiles: [{ fileName: 'markup.md', content: angly }],
     meetingTranscript: '[INTERVIEWER]: the launch codeword is ORCHID-77.',
+    maxContextChars: 64_000,
   }));
 
   assert.deepEqual(prepared.trimmedFields, [], 'nothing may be dropped over an escaping overshoot');
@@ -1105,6 +1109,7 @@ test('a truncated file says so by name, and the system prompt forbids extrapolat
   ).join('\n');
   const prepared = prepareDirectAssistPrompt(baseInput({
     referenceFiles: [{ fileName: 'series.md', content: numbered }],
+    maxContextChars: 64_000,
   }));
 
   assert.match(prepared.userPrompt, /\[TRUNCATED: only the beginning of "series\.md" is included\./);
@@ -1162,7 +1167,7 @@ test('content that fits raw but not once escaped is re-aimed, not paid for by th
 });
 
 test('a mode with many large attachments is bounded before any fitting work', async () => {
-  const { prepareDirectAssistPrompt, buildDirectAssistRequest } = await loadDirectAssist();
+  const { prepareDirectAssistPrompt, buildDirectAssistRequest, DIRECT_ASSIST_REFERENCE_CONTEXT_MAX_CHARS } = await loadDirectAssist();
   // 400 files x 1 MB. Unbounded, prompt fitting re-walked all 400 MB on the
   // main process for every request. Neither bound can change the output: no one
   // file can be given more than the budget, and past budget/MIN_REFERENCE_BODY
@@ -1171,16 +1176,21 @@ test('a mode with many large attachments is bounded before any fitting work', as
     fileName: `bulk-${i}.md`,
     content: `FACT-${i}: value ${i}. ${'z'.repeat(1_000_000)}`,
   }));
+  // Sized at the default budget, which is now the model's whole window (#795):
+  // the bound is the reference set's own ceiling, never the larger prompt one.
   const request = buildDirectAssistRequest(baseInput({ referenceFiles: many }));
-  assert.ok(request.referenceFiles.length <= 320, `kept ${request.referenceFiles.length} files`);
+  assert.ok(request.maxContextChars > DIRECT_ASSIST_REFERENCE_CONTEXT_MAX_CHARS, 'fixture must exercise the larger budget');
+  assert.ok(request.referenceFiles.length <= DIRECT_ASSIST_REFERENCE_CONTEXT_MAX_CHARS / 200, `kept ${request.referenceFiles.length} files`);
   for (const file of request.referenceFiles) {
-    assert.ok(file.content.length <= request.maxContextChars, `${file.fileName} kept ${file.content.length} chars`);
+    assert.ok(file.content.length <= DIRECT_ASSIST_REFERENCE_CONTEXT_MAX_CHARS, `${file.fileName} kept ${file.content.length} chars`);
   }
+  const tight = buildDirectAssistRequest(baseInput({ referenceFiles: many, maxContextChars: 64_000 }));
+  assert.ok(tight.referenceFiles.length <= 320, `kept ${tight.referenceFiles.length} files under a 64 000 budget`);
 
   const started = Date.now();
   const prepared = prepareDirectAssistPrompt(baseInput({ referenceFiles: many }));
   const elapsed = Date.now() - started;
-  assert.ok(prepared.userPrompt.length <= 64_000);
+  assert.ok(prepared.userPrompt.length <= request.maxContextChars);
   assert.deepEqual(prepared.shortenedFields, ['referenceContext']);
   assert.match(prepared.userPrompt, /# bulk-0\.md/, 'the first file still arrives');
   assert.ok(elapsed < 4_000, `prompt fitting took ${elapsed}ms for 400 x 1MB attachments`);

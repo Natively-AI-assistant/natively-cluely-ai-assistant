@@ -150,8 +150,12 @@ export interface DirectAssistRequestInput {
   readonly requestedLanguage?: string;
   /** Explicit value is a fallback; a format stated in currentRequest wins. */
   readonly requestedFormat?: string;
-  /** Test/operator bound. Current request and skill are never truncated. */
+  /** Test/operator bound. Current request and skill are never truncated.
+   *  Absent: the prompt is sized to the model's input window. */
   readonly maxContextChars?: number;
+  /** A context window the selected route reported (a LiteLLM or 9Router
+   *  ceiling), in tokens. It can only lower the capability table's window. */
+  readonly contextWindowTokens?: number;
 }
 
 /** Deep-frozen, normalized request used for one provider dispatch. */

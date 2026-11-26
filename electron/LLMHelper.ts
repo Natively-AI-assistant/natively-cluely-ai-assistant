@@ -119,7 +119,7 @@ import { chatGptCompatibleModel, CodexCliConfig, CodexCliService, codexSignedOut
 import { AntigravityService } from './services/AntigravityService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
 import { DirectAssistError } from './direct-assist/errors';
-import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER } from './direct-assist/requestBuilder';
+import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER, NATIVELY_API_MESSAGE_CHAR_CAP } from './direct-assist/requestBuilder';
 import { DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS } from './direct-assist/types';
 import type {
   DirectAssistDispatchRequest,
@@ -3893,6 +3893,18 @@ export class LLMHelper {
   private ninerouterInputCapFor(modelId: string): number | null {
     if (!modelId?.startsWith('ninerouter/')) return null;
     return this.ninerouterModelInputCaps.get(modelId.replace('ninerouter/', '')) ?? null;
+  }
+
+  /**
+   * The context window a gateway reported for a Direct Assist selection, or
+   * undefined. requestBuilder sizes the prompt to the model's window, and a
+   * proxied id resolves to the full cloud tier, so without this a small model
+   * behind LiteLLM or 9Router would be handed a cloud-sized prompt.
+   */
+  public getDirectAssistContextWindowTokens(selection: DirectAssistSelection): number | undefined {
+    if (selection.provider === 'litellm') return this.litellmInputCapFor(selection.model) ?? undefined;
+    if (selection.provider === 'ninerouter') return this.ninerouterInputCapFor(selection.model) ?? undefined;
+    return undefined;
   }
 
   public fitContextForCurrentModel(text: string, reservedOutputTokens?: number): string {
@@ -15871,6 +15883,10 @@ let isMultimodal = !!(imagePaths?.length);
     const eligible = (provider: DirectAssistProvider, model: string): boolean => {
       if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(provider)) return false;
       if (provider === selected.provider) return false; // already rung 0
+      // The prompt is sized for rung 0. The Natively API keeps only the start
+      // of a longer message, and the CURRENT REQUEST is at the end, so as a
+      // fallback it would answer without the question (#795).
+      if (provider === 'natively' && request.userPrompt.length > NATIVELY_API_MESSAGE_CHAR_CAP) return false;
       const family = LLMHelper.PROVIDER_LABEL_FAMILY[provider] ?? provider;
       if (this.isProviderDisabled(family)) return false;
       if (!this.directProviderHasCredential(provider)) return false;
@@ -16606,6 +16622,15 @@ let isMultimodal = !!(imagePaths?.length);
       throw new DirectAssistError(
         'CONTEXT_TOO_LARGE',
         'The Direct Assist request exceeds the selected model context limit.',
+      );
+    }
+    // Backstop for the sizing in requestBuilder and the ladder filter: the
+    // Natively API keeps only the start of a longer message, which would drop
+    // the CURRENT REQUEST at its end (#795).
+    if (provider === 'natively' && directUserPrompt.length > NATIVELY_API_MESSAGE_CHAR_CAP) {
+      throw new DirectAssistError(
+        'CONTEXT_TOO_LARGE',
+        'The Direct Assist request exceeds the Natively API message limit.',
       );
     }
 

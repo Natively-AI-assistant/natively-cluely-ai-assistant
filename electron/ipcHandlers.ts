@@ -9071,6 +9071,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     let service: DirectAssistService;
     let selection: DirectAssistRequestInput['selection'];
+    let contextWindowTokens: number | undefined;
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const selected = llmHelper.getDirectAssistSelection();
@@ -9078,6 +9079,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         throw new Error('selection_unavailable');
       }
       selection = Object.freeze({ provider: selected.provider, model: selected.model });
+      contextWindowTokens = llmHelper.getDirectAssistContextWindowTokens(selection);
       service = new DirectAssistService(llmHelper);
     } catch {
       return rejectDirectAssist(
@@ -9205,6 +9207,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       requestedLanguage: request.requestedLanguage,
       requestedFormat: request.requestedFormat,
       maxContextChars: request.maxContextChars,
+      contextWindowTokens,
     });
 
     // The paired phone gets this answer too, as it streams (before, Direct

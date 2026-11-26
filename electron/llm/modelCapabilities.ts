@@ -208,6 +208,20 @@ function deepseekFlashReadsImages(routedId: string, strippedLower: string): bool
   return (direct || /^agentrouter\//i.test(routedId || '')) && /^deepseek-(?:v\d+-)?flash(?:$|-)/.test(strippedLower);
 }
 
+/** Results of the unknown-model fallback below: their window is the cloud
+ *  tier's guess, not a fact about the model. Tagged rather than flagged on the
+ *  object so ModelCapabilities keeps its shape for every other consumer. */
+const ASSUMED_WINDOW = new WeakSet<ModelCapabilities>();
+
+/**
+ * True when `caps` came from the unknown-model fallback (a custom endpoint, a
+ * gateway model no table lists), so its maxContextTokens is assumed. Only the
+ * object getModelCapabilities returned carries the tag; a copy does not.
+ */
+export function hasAssumedContextWindow(caps: ModelCapabilities): boolean {
+  return ASSUMED_WINDOW.has(caps);
+}
+
 export function getModelCapabilities(modelId: string, isOllama: boolean): ModelCapabilities {
   // The routed id (`litellm/openai/gpt-4o`) is what the caller has; every
   // predicate below is written against the bare one. Resolve once, here, so a
@@ -321,7 +335,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
 
   // Unknown -> conservative cloud assumption (custom providers are usually large hosted).
   const b = TIER_BUDGETS['cloud'];
-  return {
+  const assumed: ModelCapabilities = {
     tier: 'cloud',
     maxContextTokens: b.max,
     promptBudgetTokens: b.system,
@@ -330,6 +344,8 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
     supportsImages: gatewayVisionHint,
     name: displayId || 'unknown',
   };
+  ASSUMED_WINDOW.add(assumed);
+  return assumed;
 }
 
 export function selectPromptTier(modelId: string, isOllama: boolean): PromptTier {
