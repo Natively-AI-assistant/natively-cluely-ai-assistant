@@ -61,6 +61,7 @@ export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null;
   private overlayWindow: BrowserWindow | null = null;
   private isWindowVisible: boolean = false;
+  private visibilityListener: ((visible: boolean) => void) | null = null;
   // Stop with the notepad open (2026-10-31): launcher mode is entered but its
   // window waits until the notepad is closed (switchToLauncher's `hidden`).
   private launcherShowOwed = false;
@@ -1002,7 +1003,7 @@ export class WindowHelper {
     // --- 3. Startup Sequence ---
     this.launcherWindow.once('ready-to-show', () => {
       this.switchToLauncher();
-      this.isWindowVisible = true;
+      this.setWindowVisible(true);
     });
 
     this.setupWindowListeners();
@@ -1238,7 +1239,7 @@ export class WindowHelper {
         }
         e.preventDefault();
         this.launcherWindow?.hide();
-        this.isWindowVisible = false;
+        this.setWindowVisible(false);
       });
 
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only).
@@ -1269,6 +1270,8 @@ export class WindowHelper {
       });
     }
 
+    this.trackLauncherMinimize(this.launcherWindow);
+
     this.launcherWindow.on('closed', () => {
       this.cancelLauncherResizeAnimation();
       this.appState.recordNativeOomTrace('launcher-window-closed', { window: 'launcher' });
@@ -1288,7 +1291,7 @@ export class WindowHelper {
         this.overlayWindow.close();
       }
       this.overlayWindow = null;
-      this.isWindowVisible = false;
+      this.setWindowVisible(false);
     });
 
     // Listen for overlay close (e.g. Cmd+W). Never truly destroy it — either
@@ -1396,6 +1399,50 @@ export class WindowHelper {
     return this.isWindowVisible;
   }
 
+  /**
+   * Called when the main window (launcher or overlay) is shown or hidden, by
+   * any path: Toggle Visibility, the tray, a screenshot's brief hide, a mode
+   * switch; and when the overlay collapses or expands. The argument is the
+   * window's own visibility (isVisible()). The phone mirror's Show / Hide
+   * button reads it (#667).
+   */
+  public onVisibilityChange(listener: ((visible: boolean) => void) | null): void {
+    this.visibilityListener = listener;
+  }
+
+  private setWindowVisible(visible: boolean): void {
+    if (this.isWindowVisible === visible) return;
+    this.isWindowVisible = visible;
+    this.notifyVisibilityListener();
+  }
+
+  /**
+   * A minimized launcher is off screen: Toggle Visibility (Cmd/Ctrl+B), the
+   * dock click and the phone's Show / Hide (#667) read the visibility flag.
+   * Left at "shown", the first Cmd/Ctrl+B only hid a window already gone and
+   * the phone offered Hide. Both platforms: the in-app minimize button,
+   * Cmd+M, Win+Down and the taskbar all end in 'minimize', and the dock or
+   * taskbar restore comes back through 'restore'. Launcher mode only: in
+   * overlay mode the launcher is hidden anyway and the overlay owns the flag.
+   */
+  private trackLauncherMinimize(win: BrowserWindow): void {
+    win.on('minimize', () => {
+      if (this.currentWindowMode === 'launcher') this.setWindowVisible(false);
+    });
+    win.on('restore', () => {
+      if (this.currentWindowMode !== 'launcher' || win.isDestroyed()) return;
+      if (!win.isMinimized()) this.setWindowVisible(true);
+    });
+  }
+
+  private notifyVisibilityListener(): void {
+    try {
+      this.visibilityListener?.(this.isWindowVisible);
+    } catch (err) {
+      console.warn('[WindowHelper] visibility listener failed:', err);
+    }
+  }
+
   // "Maximized" for the launcher means EITHER our ratio-preserving zoom (the
   // WindowControls button path, which never calls native maximize) or a real
   // OS-initiated maximize (Win+Up / snap). Reporting only isMaximized() would
@@ -1437,7 +1484,7 @@ export class WindowHelper {
     this.applyOverlayAuxVisibility(false);
     this.overlayWindow?.hide();
     this.lastLauncherShowInactive = null;
-    this.isWindowVisible = false;
+    this.setWindowVisible(false);
   }
 
   // Apply the click-through (mouse passthrough) policy on the overlay window.
@@ -2342,12 +2389,16 @@ export class WindowHelper {
   // theme/opacity/hasContent). Cached for aux (re)loads; hasContent also
   // gates the toggle window's visibility.
   public setOverlayUiState(state: { hasContent?: boolean } & Record<string, unknown>): void {
+    const wasExpanded = this.isOverlayExpanded();
     this.lastOverlayUiState = state;
     this.toggleHasContent = !!state?.hasContent;
     for (const w of [this.pillWindow, this.toggleWindow]) {
       if (w && !w.isDestroyed()) w.webContents.send('overlay-ui-state', state);
     }
     this.syncOverlayAuxVisibility();
+    // Cmd/Ctrl+B in overlay mode collapses first and hides the window 400 ms
+    // later: to the user it is gone from the collapse, so listeners hear it then.
+    if (this.isOverlayExpanded() !== wasExpanded) this.notifyVisibilityListener();
   }
 
   // An aux window asking for the last broadcast, once it is subscribed.
@@ -2413,6 +2464,12 @@ export class WindowHelper {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
     }
+    // In overlay mode the overlay is the main window: it is gone now. Left at
+    // "shown", the first Cmd/Ctrl+B only collapsed the hidden overlay and the
+    // phone (#667) offered Hide. With it cleared, Cmd/Ctrl+B takes the
+    // "hidden but expanded" path in AppState.toggleMainWindow and shows it
+    // as it was, in one press.
+    if (this.currentWindowMode === 'overlay') this.setWindowVisible(false);
   }
 
   /**
@@ -2694,7 +2751,7 @@ export class WindowHelper {
       if (opts?.hidden) {
         this.applyOverlayAuxVisibility(false);
         if (this.overlayWindow.isVisible()) this.overlayWindow.hide();
-        this.isWindowVisible = false;
+        this.setWindowVisible(false);
       } else
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       // The opacity shield only matters when the overlay is actually going to be
@@ -2774,7 +2831,7 @@ export class WindowHelper {
         // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
         if (!inactive) this.overlayWindow.focus();
       }
-      this.isWindowVisible = true;
+      this.setWindowVisible(true);
     }
 
     // Hide Launcher SECOND
@@ -2853,9 +2910,16 @@ export class WindowHelper {
     // notepad, is still up, so there is no no-window gap to guard against)
     if (hidden) {
       this.launcherShowOwed = true;
-      this.isWindowVisible = false;
+      this.setWindowVisible(false);
     } else if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
       this.launcherShowOwed = false;
+      // Minimized (the in-app button, Cmd+M): show() and showInactive() do
+      // not reliably bring a miniaturized window back on macOS, so restore it
+      // first and one Cmd+B is enough. Not on Windows: there show() and
+      // showInactive() (SW_SHOWNOACTIVATE) already restore a minimized
+      // window, and restore() would activate it, taking focus from the
+      // user's app on a ghost show.
+      if (process.platform === 'darwin' && this.launcherWindow.isMinimized()) this.launcherWindow.restore();
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first
         this.launcherWindow.setOpacity(0);
@@ -2880,7 +2944,7 @@ export class WindowHelper {
         if (!inactive) this.launcherWindow.focus();
       }
       this.lastLauncherShowInactive = requestedInactive;
-      this.isWindowVisible = true;
+      this.setWindowVisible(true);
     }
 
     // Hide Overlay SECOND

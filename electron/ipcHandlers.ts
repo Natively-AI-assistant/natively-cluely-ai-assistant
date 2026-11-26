@@ -22588,7 +22588,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
     const win = appState.getMainWindow();
 
-    if (cmd.type === 'action') {
+    if (cmd.type === 'visibility') {
+      // Show / Hide (#667): main's Toggle Visibility path, not the renderer's
+      // global-shortcut channel (Cmd/Ctrl+B is handled in main).
+      appState.setVisibilityFromPhone(cmd.visible, cmd.id);
+    } else if (cmd.type === 'action') {
       // Re-use the same global-shortcut dispatch path the keyboard uses.
       // This keeps phone actions identical to key-triggered stealth actions.
       const helper = appState.getWindowHelper();

@@ -1472,6 +1472,7 @@ import { SettingsManager } from "./services/SettingsManager"
 import { parseScreenshotDisplayPreference, resolveScreenshotDisplay } from "./screenshotDisplay"
 import { buildTelemetrySinks } from "./services/telemetry/telemetrySinks"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
+import { createPhoneVisibilityController } from "./services/phoneVisibility"
 import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
 import {
   imageExtFromBytes,
@@ -1717,6 +1718,8 @@ export class AppState {
   // a real screenshot. Cleared the moment that renderer reloads or goes away,
   // so a crashed tour can never leave the real shortcuts disabled.
   private shortcutTourContents: Electron.WebContents | null = null;
+  // Phone mirror Show / Hide (#667): see setVisibilityFromPhone.
+  private phoneVisibility: ReturnType<typeof createPhoneVisibilityController> | null = null;
   private detachShortcutTour: (() => void) | null = null;
 
   public setShortcutTour(active: boolean, contents: Electron.WebContents): void {
@@ -1920,6 +1923,17 @@ export class AppState {
       // The notepad's demand (FunnelTelemetry.notepadUsed): it came up.
       if (visible) { try { require('./services/FunnelTelemetry').funnelTelemetry.notepadUsed('opened'); } catch { /* analytics only */ } }
     });
+    // The phone mirror's Show / Hide button (#667): it reads whether Natively
+    // is on screen as the user sees it (a collapsing overlay is not), held
+    // 300 ms so a screenshot's brief hide does not reach the phone, and its
+    // taps run the Toggle Visibility path.
+    this.phoneVisibility = createPhoneVisibilityController({
+      source: this.windowHelper,
+      toggle: () => this.revealAfterMirrorHide(() => this.toggleMainWindow(true)),
+      publish: (visible, force, replyTo) => PhoneMirrorService.getInstance().setDesktopVisible(visible, force, replyTo),
+    });
+    this.windowHelper.onVisibilityChange(() => this.phoneVisibility?.windowChanged());
+    this.phoneVisibility.start();
     // Closing the notepad never leaves the screen empty (utils/meetingSurface.ts):
     // after a Stop it brings up the launcher Stop held back (endMeeting); during
     // a notepad meeting it goes home, as the overlay's logo does, and the
@@ -9530,6 +9544,16 @@ export class AppState {
    * shown, that the screen is mirrored and Natively is on the other display
    * too. Without that it vanished and came back with no word on why.
    */
+  /**
+   * Show or Hide from the phone mirror (#667): the same toggle as Toggle
+   * Visibility (Cmd+B / Ctrl+B) and the tray's Toggle Window, mirror reveal
+   * included. The phone sends the state it wants, so a repeat or a stale
+   * label does nothing (services/phoneVisibility.ts).
+   */
+  public setVisibilityFromPhone(visible: boolean, requestId?: string): void {
+    this.phoneVisibility?.request(visible, requestId);
+  }
+
   private revealAfterMirrorHide(show: () => void): void {
     const reveal = presentationMirrorGuard?.noteUserReveal();
     if (!(reveal?.restored && this.windowHelper.isVisible())) show();
@@ -9729,6 +9753,9 @@ export class AppState {
 
     const session = this.createScreenshotCaptureSession(captureKind, restoreFocus);
     this.screenshotCaptureInProgress = true;
+    // The phone mirror's Show / Hide button ignores this hide, and a tap
+    // during it waits for the restore (#667).
+    this.phoneVisibility?.holdStart();
 
     try {
       this.hideWindowsForScreenshot(session);
@@ -9746,6 +9773,7 @@ export class AppState {
         this.restoreWindowsAfterScreenshot(session);
       } finally {
         this.screenshotCaptureInProgress = false;
+        this.phoneVisibility?.holdEnd();
       }
     }
   }

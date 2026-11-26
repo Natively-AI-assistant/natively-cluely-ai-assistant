@@ -329,7 +329,7 @@ describe('wiring (source contracts)', () => {
         const wh = fs.readFileSync(path.join(repoRoot, 'electron/WindowHelper.ts'), 'utf8');
         const sw = wh.slice(wh.indexOf('public switchToOverlay('), wh.indexOf('public switchToLauncher('));
         assert.match(sw, /this\.currentWindowMode = 'overlay';/);
-        assert.match(sw, /if \(opts\?\.hidden\) \{\s*this\.applyOverlayAuxVisibility\(false\);\s*if \(this\.overlayWindow\.isVisible\(\)\) this\.overlayWindow\.hide\(\);\s*this\.isWindowVisible = false;\s*\} else/);
+        assert.match(sw, /if \(opts\?\.hidden\) \{\s*this\.applyOverlayAuxVisibility\(false\);\s*if \(this\.overlayWindow\.isVisible\(\)\) this\.overlayWindow\.hide\(\);\s*this\.setWindowVisible\(false\);\s*\} else/);
         assert.match(sw, /this\.launcherWindow\.hide\(\);/);
         // Held down against the overlay renderer's own show requests until the user shows it.
         assert.match(sw, /this\.overlayHeldHidden = !!opts\?\.hidden;/);
