@@ -168,7 +168,7 @@ Every star pushes Natively higher in GitHub search, helping developers and job s
 
 ## Demo
 
-![Natively product preview — meeting assistant overlay and transcription](assets/dashboard-preview.png)
+![Natively home screen with recent meetings and the Start Natively button](assets/dashboard-preview.png)
 
 Natively covers **a complete live meeting scenario**:
 
