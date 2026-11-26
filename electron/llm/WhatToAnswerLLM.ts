@@ -1190,7 +1190,9 @@ The user triggered this action with a coding problem on screen and NO new questi
                     });
                 } catch { return ''; }
             })();
-            const _wtaLegacyUser = _personalBlock ? `${_wtaUserBase}\n\n${_personalBlock}` : _wtaUserBase;
+            // The user's repositories (#781), which the V3 composer carries as code_repos.
+            const _codeReposBlock = _v3p ? '' : await (require('../services/answerPersonalContext') as typeof import('../services/answerPersonalContext')).codeReposBlockForAnswers(answerPlan?.question || '');
+            const _wtaLegacyUser = [_wtaUserBase, _personalBlock, _codeReposBlock].filter(Boolean).join('\n\n');
             const _wtaUserMessage = _v3p ? _wtaUserBase : withDiagramTurnBlock(_wtaLegacyUser, diagramTurn);
             // PR #429 Bug 003: `_v3p?.system ?? finalPromptOverride` discarded the
             // ACTIVE SKILL block on every V3 turn — finalPromptOverride is its only

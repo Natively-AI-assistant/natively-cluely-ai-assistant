@@ -3361,6 +3361,15 @@ export class AppState {
     } catch (error) {
       console.error('[AppState] Failed to initialize KnowledgeOrchestrator:', error);
     }
+
+    // The user's GitHub repositories (#781): resume any brief build cut off by
+    // the last quit. Independent of the orchestrator; it only reads the résumé's
+    // GitHub login through it when one exists.
+    try {
+      require('./services/repoBrief').initRepoBriefs(() => this.knowledgeOrchestrator?.getProfileData?.() ?? null);
+    } catch (error) {
+      console.error('[AppState] Failed to initialize repository briefs:', error);
+    }
   }
 
   private setupAutoUpdater(): void {

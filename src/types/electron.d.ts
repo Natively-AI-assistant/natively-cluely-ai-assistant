@@ -137,6 +137,28 @@ export interface VisionModelState {
   inconclusive?: boolean
 }
 
+/** GitHub repositories the user added for interview briefs (#781). Mirrors RepoBriefView in electron/services/repoBrief. */
+export interface RepoBriefView {
+  key: string;
+  owner: string;
+  repo: string;
+  url: string;
+  projectName?: string;
+  status: 'queued' | 'building' | 'ready' | 'failed' | 'waiting';
+  stage?: string | null;
+  error?: { code: string; message: string; retryAt?: number } | null;
+  sha?: string;
+  tier?: 'small' | 'medium' | 'huge';
+  generatedAt?: string;
+  functionCount?: number;
+}
+
+export interface RepoBriefsState {
+  repos: RepoBriefView[];
+  suggestions: Array<{ owner: string; repo: string; url: string; projectName?: string }>;
+  max: number;
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -1254,6 +1276,11 @@ export interface ElectronAPI {
   profileDraftOwnAnswers: () => Promise<{ success: boolean; written?: string[]; error?: string }>;
   onProfileOwnAnswersUpdated: (callback: (data: { written: string[] }) => void) => () => void;
   profileGetProfile: () => Promise<any>
+  repoBriefsList: () => Promise<RepoBriefsState>
+  repoBriefsAdd: (url: string, projectName?: string) => Promise<({ success: true } & RepoBriefsState) | { success: false; error?: string; proRequired?: boolean }>
+  repoBriefsRemove: (key: string) => Promise<{ success: boolean } & Partial<RepoBriefsState>>
+  repoBriefsRefresh: (key: string) => Promise<{ success: boolean; error?: string } & Partial<RepoBriefsState>>
+  onRepoBriefsUpdated: (callback: (data: RepoBriefsState) => void) => () => void
   profileGetCompanyDossier: () => Promise<any | null>
   profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; error?: string }>
 

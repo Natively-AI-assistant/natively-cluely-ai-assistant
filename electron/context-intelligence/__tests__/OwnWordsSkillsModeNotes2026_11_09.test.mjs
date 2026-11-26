@@ -249,7 +249,8 @@ describe('the same context on every path that skips the V3 composer', () => {
   });
   test('manual-answer fallback: in the context it sends', () => {
     const s = src('electron/IntelligenceEngine.ts');
-    assert.match(s, /const context = \[transcriptContext, personalBlock\]\.filter\(Boolean\)/);
+    // #781 appends the user's repository briefs after it, on the same line.
+    assert.match(s, /const context = \[transcriptContext, personalBlock(, codeReposBlock)?\]\.filter\(Boolean\)/);
   });
   test('Direct Assist: skills merged into its skill slot, facts into its user-context block', () => {
     const s = src('electron/ipcHandlers.ts');
