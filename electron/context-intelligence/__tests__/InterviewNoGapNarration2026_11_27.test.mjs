@@ -129,3 +129,26 @@ describe('job-search status is a commitment question in the job modes only', asy
     assert.equal(personalCommitmentNotice('Do you have any other offers?', 'call-center', true), '');
   });
 });
+
+// Cycle 1 (2026-11-27): a JD's "must already be authorized; no sponsorship" came back as the user's own status, and
+// the saved-answer sentence must stay in the job modes only (the other modes' prompts are byte-identical to main).
+const { personalCommitmentNotice, TYPED_COMMITMENT_NOTICE } = await load('generation/prompt-composer.js');
+describe('commitment notices: JD requirements are not the user\'s status; job modes only', () => {
+  for (const modeId of ['technical-interview', 'looking-for-work']) {
+    test(`${modeId}: heard and typed notices say a JD requirement is never the user's status`, () => {
+      const heard = personalCommitmentNotice('Are you authorized to work in the US?', modeId, true);
+      assert.match(heard, /never the user's own status or answer/);
+      assert.match(heard, /say that answer as written/);
+      assert.equal(personalCommitmentNotice('recruiter asked if I need sponsorship, what do I say', modeId, false), TYPED_COMMITMENT_NOTICE);
+      assert.match(TYPED_COMMITMENT_NOTICE, /never the user's own status or answer/);
+    });
+  }
+  for (const modeId of ['sales', 'team-meet', 'general', 'seminar', 'call-center']) {
+    test(`${modeId}: heard commitment notice is unchanged (no job-mode sentences)`, () => {
+      const n = personalCommitmentNotice('Would you relocate?', modeId, true);
+      assert.ok(n, 'notice still applies');
+      assert.doesNotMatch(n, /say that answer as written|never the user's own status/);
+      assert.match(n, /may be acknowledged\.\)$/);
+    });
+  }
+});
