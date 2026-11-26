@@ -77,10 +77,15 @@ test("macOS: libobjc's macOS 13 register variants (cidre on arm64) are rejected"
 });
 
 test('macOS: the rebuilt modules pass with the real otool and nm (when present on a Mac)', { skip: process.platform !== 'darwin' }, (t) => {
+  // Where build-native.js builds (CARGO_TARGET_DIR, external build storage,
+  // else native-module/target): checking native-module/target while Cargo
+  // writes elsewhere would pass on a stale dylib.
+  const { resolveCargoTargetDir } = require('../lib/external-build-storage.cjs');
+  const targetDir = resolveCargoTargetDir({ repoRoot: root }) || path.join(root, 'native-module', 'target');
   const built = ['aarch64-apple-darwin', 'x86_64-apple-darwin']
-    .map((triple) => path.join(root, 'native-module', 'target', triple, 'release', 'libnatively_audio.dylib'))
+    .map((triple) => path.join(targetDir, triple, 'release', 'libnatively_audio.dylib'))
     .filter((f) => fs.existsSync(f));
-  if (built.length === 0) return t.skip('no native-module build in target/');
+  if (built.length === 0) return t.skip(`no native-module build in ${targetDir}`);
   for (const file of built) assert.doesNotThrow(() => assertMacWeakLinks(file), file);
 });
 

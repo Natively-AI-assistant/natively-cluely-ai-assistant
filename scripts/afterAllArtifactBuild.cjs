@@ -292,6 +292,25 @@ function verifyZipManifest(outDir) {
 }
 
 /**
+ * Where the DMG stage goes: the external build storage's tmp/ when it is set up
+ * (a staged Natively.app is large), else os.tmpdir().
+ */
+function resolveStageTempBase() {
+  const { resolveExternalBuildRoot } = require('./lib/external-build-storage.cjs');
+  const extRoot = resolveExternalBuildRoot({ repoRoot: path.join(__dirname, '..') });
+  if (extRoot) {
+    const extTmp = path.join(extRoot, 'tmp');
+    try {
+      fs.mkdirSync(extTmp, { recursive: true });
+      return extTmp;
+    } catch {
+      // Fall back to os.tmpdir() below.
+    }
+  }
+  return os.tmpdir();
+}
+
+/**
  * Build a styled, Developer-ID-signed DMG from a single signed .app using create-dmg.
  * create-dmg stages via `hdiutil create -srcfolder`, preserving the app's nested
  * code signatures (unlike electron-builder's DMG layout, which corrupts them).
@@ -300,7 +319,7 @@ function verifyZipManifest(outDir) {
 function buildStyledDmg({ appPath, outDmg, identity }) {
   // Stage ONLY the .app in an isolated temp dir so create-dmg's window contains
   // exactly [Natively.app, Applications-droplink] and nothing stray.
-  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-dmg-'));
+  const stage = fs.mkdtempSync(path.join(resolveStageTempBase(), 'natively-dmg-'));
   const stagedApp = path.join(stage, path.basename(appPath));
   execFileSync('ditto', [appPath, stagedApp], { stdio: 'inherit' }); // ditto preserves signatures
 
@@ -410,11 +429,15 @@ const ARCH_MAP = [
 module.exports = async function afterAllArtifactBuild(buildResult) {
   if (process.platform !== 'darwin') return [];
 
-  const ebDmgs = (buildResult.artifactPaths || []).filter((p) => p.endsWith('.dmg'));
-  // Nothing DMG-related and no mac apps => not our concern.
+  const artifacts = (buildResult && buildResult.artifactPaths) || [];
+  const ebDmgs = artifacts.filter((p) => p.endsWith('.dmg'));
+  // Signed builds disable electron-builder's DMG target (only building zip), so
+  // ebDmgs is empty there — fall back to buildResult.outDir or the first artifact's
+  // parent directory before defaulting to ./release.
   const outDir = ebDmgs.length
     ? path.dirname(ebDmgs[0])
-    : path.resolve(process.cwd(), 'release');
+    : (buildResult && buildResult.outDir) ||
+      (artifacts.length ? path.dirname(artifacts[0]) : path.resolve(process.cwd(), 'release'));
 
   const creds = notarytoolArgs();
   if (!creds) {
