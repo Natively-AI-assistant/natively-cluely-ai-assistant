@@ -197,6 +197,15 @@ export interface CallTreeWindow {
   nodes: Array<CallTreeNode>
 }
 
+export interface DisplayMirrorState {
+  /** Some display is showing the same picture as another one. */
+  mirrored: boolean
+  /** Windows only: a mirrored set includes a Miracast (wireless) display. */
+  wireless: boolean
+  /** How many displays are in a mirror set (0 when not mirrored). */
+  mirroredDisplays: number
+}
+
 export interface NativeCaptureLogLine {
   /** Wall-clock ms since the Unix epoch when the line was written. */
   atMs: number
@@ -293,6 +302,8 @@ export declare function deliverClicksWithoutActivation(handle: Buffer): boolean
  * on another OS. Runs on a worker thread.
  */
 export declare function getCalendarEvents(startMs: number, endMs: number): Promise<Array<CalendarEventInfo> | null>
+
+export declare function getDisplayMirrorState(): DisplayMirrorState
 
 /**
  * Name of the current default input device (cpal), the id get_input_devices

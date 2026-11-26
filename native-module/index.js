@@ -585,6 +585,7 @@ module.exports.deactivateDodoKey = nativeBinding.deactivateDodoKey
 module.exports.deliverClicksWithoutActivation = nativeBinding.deliverClicksWithoutActivation
 module.exports.getCalendarEvents = nativeBinding.getCalendarEvents
 module.exports.getDefaultInputDeviceId = nativeBinding.getDefaultInputDeviceId
+module.exports.getDisplayMirrorState = nativeBinding.getDisplayMirrorState
 module.exports.getDefaultOutputDeviceId = nativeBinding.getDefaultOutputDeviceId
 module.exports.getHardwareId = nativeBinding.getHardwareId
 module.exports.getInputDevices = nativeBinding.getInputDevices

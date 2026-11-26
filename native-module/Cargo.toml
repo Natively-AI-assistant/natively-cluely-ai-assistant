@@ -93,6 +93,10 @@ windows = { version = "0.52.0", features = [
     #                                       VARIANT (call_tree.rs: a meeting link's address).
     "Win32_System_Variant",
     "Win32_System_Ole",
+    #   Win32_Devices_Display             — QueryDisplayConfig: whether the screen is
+    #                                       duplicated to a projector (display_mirror.rs).
+    "Win32_Devices",
+    "Win32_Devices_Display",
 ] }
 tracing = "0.1.44"
 

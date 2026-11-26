@@ -900,6 +900,9 @@ let latestSystemAudioPermissionWarning: string | null = null;
 // Undetectable mode for the windows setContentProtection cannot reach (file
 // pickers, message boxes, tooltips, popups). Built in initializeApp.
 let foreignWindowCaptureGuard: ForeignWindowCaptureGuard | null = null;
+// Undetectable mode while the screen is mirrored to a projector (#630): a
+// mirror is not a capture, so the windows are hidden. Built in initializeApp.
+let presentationMirrorGuard: PresentationMirrorGuard | null = null;
 
 function rememberSystemAudioPermissionWarning(message: string): void {
   latestSystemAudioPermissionWarning = message;
@@ -1506,6 +1509,8 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { nativePromptsBlocked } from './services/stealthPromptGate'
 import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCaptureGuard } from './services/foreignWindowCaptureGuard'
+import { createPresentationMirrorGuard, type PresentationMirrorGuard } from './services/presentationMirrorGuard'
+import { createMirrorShowGate, type GateableWindow } from './services/mirrorShowGate'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider, setNoActivateClickDelivery } from './utils/windowsFocusPolicy'
 import { hasLiveRenderer } from './utils/rendererLiveness'
@@ -2219,7 +2224,7 @@ export class AppState {
           // presses keys or moves focus; the user pastes.
           require('./services/dictation/wireDictation').pressDictation();
         } else if (actionId === 'general:toggle-visibility') {
-          this.toggleMainWindow(true);
+          this.revealAfterMirrorHide(() => this.toggleMainWindow(true));
         } else if (actionId === 'general:toggle-mouse-passthrough') {
           // Adapted from public PR #113 — verify premium interaction
           this.toggleOverlayMousePassthrough();
@@ -9477,6 +9482,78 @@ export class AppState {
     this.setView("queue")
   }
 
+  /**
+   * Presentation-mirror hide (#630): the same hide and restore a screenshot
+   * uses, without the capture. Restores without focus.
+   */
+  public hideWindowsForMirroring(): ScreenshotCaptureSession {
+    const session = this.createScreenshotCaptureSession('full', false);
+    this.hideWindowsForScreenshot(session);
+    return session;
+  }
+
+  public restoreWindowsAfterMirroring(session: ScreenshotCaptureSession): void {
+    this.restoreWindowsAfterScreenshot(session);
+  }
+
+  /**
+   * A window opened by itself while mirrored and was hidden again. Restore the
+   * later state (its window mode: a meeting that started mid-mirror comes back
+   * as the overlay) and keep the main window and notepad if either hide saw them.
+   */
+  public mergeMirroringHides(earlier: ScreenshotCaptureSession, later: ScreenshotCaptureSession): ScreenshotCaptureSession {
+    return {
+      ...later,
+      wasMainWindowVisible: earlier.wasMainWindowVisible || later.wasMainWindowVisible,
+      wasNotesVisible: earlier.wasNotesVisible || later.wasNotesVisible,
+      wasStealthTypingActive: earlier.wasStealthTypingActive || later.wasStealthTypingActive,
+    };
+  }
+
+  /** Whether a window hideWindowsForMirroring() would hide is on screen. */
+  public isAnyMirrorHideableWindowVisible(): boolean {
+    const shown = (win: BrowserWindow | null | undefined) => !!win && !win.isDestroyed() && win.isVisible();
+    return this.windowHelper.isVisible()
+      || shown(this.settingsWindowHelper.getSettingsWindow())
+      || shown(this.modelSelectorWindowHelper.getWindow())
+      || this.notesWindowHelper.isVisible();
+  }
+
+  /**
+   * Toggle Visibility and the tray's Show (#630). The presentation-mirror
+   * guard first restores whatever it hid (main window, notepad, Settings),
+   * through the screenshot restore; `show` runs only when the main window is
+   * still hidden after that. Running the toggle on a just-restored window
+   * would hide it again.
+   */
+  private revealAfterMirrorHide(show: () => void): void {
+    const restored = presentationMirrorGuard?.noteUserReveal() ?? false;
+    if (restored && this.windowHelper.isVisible()) return;
+    show();
+  }
+
+  /**
+   * The windows the presentation-mirror guard hides and restores (#630), so
+   * the ones mirrorShowGate holds off a mirrored screen: launcher, overlay and
+   * its pill and toggle, Settings, the model selector and the notepad.
+   */
+  public isMirrorGuardedWindow(win: GateableWindow): boolean {
+    const guarded = [
+      this.windowHelper.getLauncherWindow(),
+      this.windowHelper.getOverlayWindow(),
+      this.windowHelper.getPillWindow(),
+      this.windowHelper.getToggleWindow(),
+      this.settingsWindowHelper.getSettingsWindow(),
+      this.modelSelectorWindowHelper.getWindow(),
+      this.notesWindowHelper.getWindow(),
+    ];
+    return guarded.some((w) => !!w && (w as unknown) === win);
+  }
+
+  public isScreenshotCaptureInProgress(): boolean {
+    return this.screenshotCaptureInProgress;
+  }
+
   private createScreenshotCaptureSession(
     captureKind: ScreenshotCaptureKind,
     restoreFocus: boolean
@@ -10022,13 +10099,13 @@ export class AppState {
       {
         label: 'Show Natively',
         click: () => {
-          this.centerAndShowWindow()
+          this.revealAfterMirrorHide(() => this.centerAndShowWindow())
         }
       },
       {
         label: `Toggle Window (${displayToggle})`,
         click: () => {
-          this.toggleMainWindow(true)
+          this.revealAfterMirrorHide(() => this.toggleMainWindow(true))
         }
       },
       {
@@ -10116,6 +10193,7 @@ export class AppState {
     this.cropperWindowHelper.setContentProtection(state)
     this.notesWindowHelper.setContentProtection(state)
     foreignWindowCaptureGuard?.sync(state)
+    presentationMirrorGuard?.sync(state)
     // A meeting already running: its inactivity stop follows (a stop shows the launcher).
     try { this.meetingAutoStop.setUndetectable(state) } catch { /* auto-stop never blocks stealth */ }
 
@@ -12172,6 +12250,65 @@ if (process.env.THINKING_MATRIX === '1') {
         console.warn('[Init] Startup screen recording permission check failed:', e);
       }
     }, 800);
+  }
+
+  // Undetectable while the screen is mirrored to a projector or another
+  // display (#630, presentationMirrorGuard.ts): the windows are hidden until
+  // the mirror ends or the user presses Toggle Visibility. Polled while
+  // Undetectable is on; display changes and window shows check at once.
+  // mirrorShowGate holds a window that opens by itself (a meeting starting)
+  // before it reaches the screen; the show check is the fallback.
+  try {
+    // Deferred a tick: a show handler runs inside the show path, which still
+    // has its own visibility bookkeeping to finish.
+    let checkQueued = false;
+    const queueMirrorCheck = () => {
+      if (checkQueued) return;
+      checkQueued = true;
+      setTimeout(() => {
+        checkQueued = false;
+        presentationMirrorGuard?.check();
+      }, 0);
+    };
+    const mirrorShowGate = createMirrorShowGate({
+      isGuarded: (win) => appState.isMirrorGuardedWindow(win),
+      shouldHold: () => presentationMirrorGuard?.shouldHoldShow() ?? false,
+      onHeld: queueMirrorCheck,
+      log: (message) => console.log(message),
+    });
+    presentationMirrorGuard = createPresentationMirrorGuard({
+      readMirrorState: () => {
+        const { loadNativeModule } = require('./audio/nativeModuleLoader');
+        const fn = loadNativeModule()?.getDisplayMirrorState;
+        return typeof fn === 'function' ? fn() : null;
+      },
+      isUndetectable: () => appState.getUndetectable(),
+      anyWindowVisible: () => appState.isAnyMirrorHideableWindowVisible(),
+      isBusy: () => appState.isScreenshotCaptureInProgress(),
+      hideAll: () => appState.hideWindowsForMirroring(),
+      restore: (session) => appState.restoreWindowsAfterMirroring(session),
+      merge: (earlier, later) => appState.mergeMirroringHides(earlier, later),
+      releaseHeld: () => mirrorShowGate.releaseAll(),
+      // Never what keeps the process alive at quit.
+      setInterval: (fn, ms) => {
+        const handle = setInterval(fn, ms);
+        handle.unref?.();
+        return handle;
+      },
+      clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+      log: (message) => console.log(message),
+    });
+    const watchShow = (win: BrowserWindow) => {
+      mirrorShowGate.install(win);
+      win.on('show', queueMirrorCheck);
+    };
+    BrowserWindow.getAllWindows().forEach(watchShow);
+    app.on('browser-window-created', (_event, win) => watchShow(win));
+    screen.on('display-added', queueMirrorCheck);
+    screen.on('display-removed', queueMirrorCheck);
+    presentationMirrorGuard.sync(appState.getUndetectable());
+  } catch (e) {
+    console.error('[Main] Failed to start the presentation mirror guard:', e);
   }
 
   // Undetectable also covers the process's non-BrowserWindow windows: file

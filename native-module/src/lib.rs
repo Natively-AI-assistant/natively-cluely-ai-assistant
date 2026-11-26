@@ -32,6 +32,11 @@ pub mod stealth_window;
 // macOS and Windows implementations live side by side in the module.
 pub mod capture_exclusion;
 
+// Undetectable mode: whether the screen is mirrored to a projector or another
+// display (a mirror is not a capture, so the app hides its windows instead).
+// macOS and Windows implementations live side by side in the module.
+pub mod display_mirror;
+
 // Meeting detection: which processes hold a microphone, and the visible windows
 // (owner + title). macOS and Windows implementations side by side.
 pub mod meeting_signals;

@@ -180,6 +180,8 @@ export function getPlatformFacts(platform) {
         undetectable: {
           hides: 'its Dock icon',
           caveat: 'Some newer capture apps can still see it.',
+          // Displays › Use as (macOS 13 and later).
+          extendDisplay: { keys: null, text: 'In System Settings, open Displays and set the projector to Extended display, not Mirror.' },
         },
         disguises: ['Terminal', 'System Settings', 'Activity Monitor'],
         stealthTypingNeedsAccessibility: true,
@@ -228,6 +230,8 @@ export function getPlatformFacts(platform) {
         undetectable: {
           hides: 'its taskbar button',
           caveat: 'Needs Windows 10 version 2004 or later. Older versions show a black box.',
+          // The Win+P project menu: "Press [Win] [P] and pick Extend, not Duplicate."
+          extendDisplay: { keys: ['Win', 'P'], text: 'and pick Extend, not Duplicate.' },
         },
         disguises: ['Command Prompt', 'Settings', 'Task Manager'],
         stealthTypingNeedsAccessibility: false,

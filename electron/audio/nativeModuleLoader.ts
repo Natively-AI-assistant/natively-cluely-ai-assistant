@@ -51,6 +51,11 @@ export interface NativeModule {
   // can't say. Optional: a binary without them means no native signals.
   getMicUsers?: () => Array<{ pid?: number; bundleId?: string; path?: string }> | null;
   getVisibleWindows?: () => Array<{ pid: number; owner: string; title: string; path?: string }> | null;
+  // Undetectable while presenting (native-module/src/display_mirror.rs, #630):
+  // whether the screen is mirrored to a projector or another display. macOS
+  // CGDisplayIsInMirrorSet, Windows QueryDisplayConfig clone paths. Optional:
+  // a binary without it means the windows are never hidden for a mirror.
+  getDisplayMirrorState?: () => { mirrored: boolean; wireless: boolean; mirroredDisplays: number };
   // Who speaks in a desktop call (native-module/src/call_tree.rs): the app's
   // windows as flattened accessibility trees, read on a worker thread. macOS
   // AX (needs Accessibility; `trusted: false` without it, never a prompt),

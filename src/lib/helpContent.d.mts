@@ -39,7 +39,12 @@ export interface HelpPlatformFacts {
   restartAfterGrant: boolean;
   onDeviceSpeech: string[];
   systemAudio: { summary: string; fix: string };
-  undetectable: { hides: string; caveat: string };
+  undetectable: {
+    hides: string;
+    caveat: string;
+    /** How to switch a mirrored projector to an extended desktop. With keys: "Press <keys> <text>". */
+    extendDisplay: { keys: string[] | null; text: string };
+  };
   disguises: string[];
   stealthTypingNeedsAccessibility: boolean;
   zoomGuide: boolean;

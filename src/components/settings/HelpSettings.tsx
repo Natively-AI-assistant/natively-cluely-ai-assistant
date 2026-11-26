@@ -791,7 +791,7 @@ const HelpPane: React.FC<{
             icon: <Ghost size={20} />,
             title: t('Staying invisible'),
             description: t('Keep Natively out of screen shares and recordings.'),
-            keywords: 'undetectable detectable stealth screen share hide dock taskbar process disguise zoom capture',
+            keywords: 'undetectable detectable stealth screen share hide dock taskbar process disguise zoom capture projector mirror mirrored duplicate extend present presenting airplay miracast',
             body: (
                 <>
                     {stealthClip && <HelpClip clip={stealthClip} label={stealthClip.label} />}
@@ -807,6 +807,19 @@ const HelpPane: React.FC<{
                     <SettingsNotice tone={tones.warn} icon={<TriangleAlert size={14} />} className="mb-0">
                         Check with a test share before a call that matters.
                     </SettingsNotice>
+                    <HelpSubhead>Projectors and mirrored screens</HelpSubhead>
+                    <p>
+                        A projector or monitor that mirrors your screen shows exactly what you see, so no app can stay on your
+                        screen and off the mirror. While Undetectable is on and your screen is mirrored, Natively hides its
+                        windows. Press {keys('toggleVisibility')} to show them anyway. They come back by themselves when the
+                        mirror ends.
+                    </p>
+                    <p>
+                        To keep Natively on your own screen while you present, extend your desktop instead of mirroring.
+                        {' '}{facts.undetectable.extendDisplay.keys
+                            ? <>Press {inlineKeys(facts.undetectable.extendDisplay.keys)} {facts.undetectable.extendDisplay.text}</>
+                            : facts.undetectable.extendDisplay.text}
+                    </p>
                     {facts.zoomGuide && (
                         <>
                             <HelpSubhead>Zoom</HelpSubhead>
