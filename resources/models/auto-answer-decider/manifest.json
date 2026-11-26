@@ -2,9 +2,9 @@
   "schema": 1,
   "kind": "seq-cls",
   "id": "natively/auto-answer-decider-student",
-  "version": "2026.11.14-student-yt2",
-  "about": "Auto Answer decider: ModernBERT-base (149.6M) student yt2, distilled from the Laya teacher r3 (alpha 0.7, 4 epochs) on the 117k synthetic rows plus 6,934 real-call moments from public YouTube interviews and sales calls (Claude Opus 5.5 labels). Paid, private download (API keys + Pro): int8 per-channel with reduced range on onnxruntime 1.24.3 (Windows, Apple Silicon macOS 14+; student 1's full-range int8 broke on x86), 4-bit MatMulNBits on the app onnxruntime 1.22 (Intel Macs, macOS 13). Gold (int8, onnxruntime 1.24.3): alone 32/34 asks, 0/153 false fires; with the LLM judge below the cut-off 32/34, 1/153. Real-call test (627 moments, 8 held-out videos): 88.8% answer-vs-not. ml/auto-answer-decider, docs/autopilot/decider-decisions.md.",
-  "graph": "decider-student-yt2.int8.onnx",
+  "version": "2026.11.25-student-v5",
+  "about": "Auto Answer decider: ModernBERT-base (149.6M) student v5 = uniform soup of 3 seeds fine-tuned from student yt2 (lr 1e-5, 2 epochs, alpha 0.7) on dataset-v5 (real shared meetings + 78 public YouTube calls, Claude Opus 5.5 / Fable 5.2 + GPT 6.1 Sol labels, likely label errors re-voted) with an equal replay of yt2's synthetic rows. Thresholds fitted on the cleaned calib split (two strong labellers per moment): answer 0.815, silent 0.765, wait 0.855. Paid, private download: int8 per-channel reduced range on onnxruntime 1.24.3 (Windows, Apple Silicon macOS 14+), 4-bit MatMulNBits on 1.22 (Intel Macs, macOS 13). Gold (int8, app pipeline): 136/187 decided alone, 0 false answers. ml/auto-answer-decider.",
+  "graph": "decider-student-v5.int8.onnx",
   "tokenizer": "tokenizer",
   "labels": [
     "answer",
@@ -15,9 +15,9 @@
   "max_len": 512,
   "head_max_len": 192,
   "thresholds": {
-    "answer": 0.9,
-    "silent": 0.9,
-    "wait": 0.9
+    "answer": 0.815,
+    "silent": 0.765,
+    "wait": 0.855
   },
   "files": [
     {
@@ -33,14 +33,14 @@
   ],
   "variants": {
     "int8": {
-      "graph": "decider-student-yt2.int8.onnx",
-      "sha256": "470333e35ec7cf291fc708b06f415f7764d709270f170bc0f55a6d1812b88aae",
+      "graph": "decider-student-v5.int8.onnx",
+      "sha256": "a0766f0e19c30283fdc661aacb98493cd393358318e089a17deeb868f62d8c45",
       "bytes": 151292425,
       "runtime": "ort-1.24"
     },
     "q4": {
-      "graph": "decider-student-yt2.q4.onnx",
-      "sha256": "a72162bd3ca62efcfb9294891f8f1b19e99501cd1445b1049051b4933d1610ba",
+      "graph": "decider-student-v5.q4.onnx",
+      "sha256": "68ddf96a9fddf84b2372dae797698dccf3e8bc3fac4fceceec5f1341c650e2f3",
       "bytes": 94228145,
       "runtime": "ort-1.22"
     }
