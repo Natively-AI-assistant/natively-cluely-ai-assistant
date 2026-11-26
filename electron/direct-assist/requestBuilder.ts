@@ -31,7 +31,6 @@ A reference file marked TRUNCATED is cut off: the rest of that file is not avail
  */
 export const DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER = 'CURRENT TURN SPEECH (PART OF CURRENT REQUEST):';
 
-const DEFAULT_MAX_CONTEXT_CHARS = 64_000;
 const MIN_MAX_CONTEXT_CHARS = 1_024;
 const MAX_MAX_CONTEXT_CHARS = 1_000_000;
 
@@ -465,7 +464,12 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
   const requestedFormat = detectRequestedFormat(input.currentRequest)
     ?? explicitFormat
     ?? detectLatest(transcriptText, FORMAT_PATTERNS);
-  const requestedMax = Number.isFinite(input.maxContextChars) ? Number(input.maxContextChars) : DEFAULT_MAX_CONTEXT_CHARS;
+  // Callers that omit maxContextChars get the model's real input window
+  // (modelInputChars below), not a fixed 64k ceiling that truncates reference
+  // files on 200k–2M-token models.
+  const requestedMax = Number.isFinite(input.maxContextChars)
+    ? Number(input.maxContextChars)
+    : Number.POSITIVE_INFINITY;
   const capabilityModel = input.selection.provider === 'antigravity'
     ? input.selection.model.replace(/^antigravity:/, '')
     : input.selection.provider === 'litellm'

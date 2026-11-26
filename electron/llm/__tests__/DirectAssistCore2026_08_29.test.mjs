@@ -442,6 +442,7 @@ test('a starved reference file is reported even when the prompt as a whole fits'
       { fileName: 'huge.md', content: 'H'.repeat(300_000) },
       { fileName: 'resume.md', content: 'RESUME_MARKER Arjun Nair.' },
     ],
+    maxContextChars: 64_000,
   }));
 
   // Nothing was dropped and the request is well inside the budget, but the
@@ -1038,6 +1039,7 @@ test('a big reference set cannot crowd the live transcript out of the prompt', a
     source: 'typed',
     referenceFiles: [{ fileName: 'huge.md', content: 'H'.repeat(300_000) }],
     meetingTranscript: transcript,
+    maxContextChars: 64_000,
   }));
 
   assert.deepEqual(prepared.trimmedFields, []);
@@ -1059,6 +1061,7 @@ test('a small transcript takes only what it needs and leaves the rest to the ref
     source: 'typed',
     referenceFiles: [{ fileName: 'huge.md', content: 'H'.repeat(300_000) }],
     meetingTranscript: '[INTERVIEWER]: short live exchange.',
+    maxContextChars: 64_000,
   }));
 
   assert.deepEqual(prepared.trimmedFields, []);
@@ -1082,6 +1085,7 @@ test('XML-escaping expansion is re-aimed, not paid for by sacrificing a whole fi
     source: 'typed',
     referenceFiles: [{ fileName: 'markup.md', content: angly }],
     meetingTranscript: '[INTERVIEWER]: the launch codeword is ORCHID-77.',
+    maxContextChars: 64_000,
   }));
 
   assert.deepEqual(prepared.trimmedFields, [], 'nothing may be dropped over an escaping overshoot');
@@ -1105,6 +1109,7 @@ test('a truncated file says so by name, and the system prompt forbids extrapolat
   ).join('\n');
   const prepared = prepareDirectAssistPrompt(baseInput({
     referenceFiles: [{ fileName: 'series.md', content: numbered }],
+    maxContextChars: 64_000,
   }));
 
   assert.match(prepared.userPrompt, /\[TRUNCATED: only the beginning of "series\.md" is included\./);
@@ -1171,19 +1176,52 @@ test('a mode with many large attachments is bounded before any fitting work', as
     fileName: `bulk-${i}.md`,
     content: `FACT-${i}: value ${i}. ${'z'.repeat(1_000_000)}`,
   }));
-  const request = buildDirectAssistRequest(baseInput({ referenceFiles: many }));
+  const request = buildDirectAssistRequest(baseInput({
+    referenceFiles: many,
+    maxContextChars: 64_000,
+  }));
   assert.ok(request.referenceFiles.length <= 320, `kept ${request.referenceFiles.length} files`);
   for (const file of request.referenceFiles) {
     assert.ok(file.content.length <= request.maxContextChars, `${file.fileName} kept ${file.content.length} chars`);
   }
 
   const started = Date.now();
-  const prepared = prepareDirectAssistPrompt(baseInput({ referenceFiles: many }));
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    referenceFiles: many,
+    maxContextChars: 64_000,
+  }));
   const elapsed = Date.now() - started;
   assert.ok(prepared.userPrompt.length <= 64_000);
   assert.deepEqual(prepared.shortenedFields, ['referenceContext']);
   assert.match(prepared.userPrompt, /# bulk-0\.md/, 'the first file still arrives');
   assert.ok(elapsed < 4_000, `prompt fitting took ${elapsed}ms for 400 x 1MB attachments`);
+});
+
+test('omitting maxContextChars uses the model input window, not a fixed 64k ceiling', async () => {
+  const { buildDirectAssistRequest, prepareDirectAssistPrompt } = await loadDirectAssist();
+  // gemini-3.7-flash is a cloud model (128k tokens → hundreds of thousands of
+  // chars). Before the fix, Math.min with the 64k default always won.
+  // Stay under DIRECT_ASSIST_REFERENCE_CONTEXT_MAX_CHARS (200k) so this only
+  // probes the request budget, not the separate reference-context safety cap.
+  const body = 'B'.repeat(120_000);
+  const request = buildDirectAssistRequest(baseInput({
+    referenceFiles: [{ fileName: 'big.md', content: body }],
+  }));
+  assert.ok(
+    request.maxContextChars > 64_000,
+    `expected model window above 64k, got ${request.maxContextChars}`,
+  );
+
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    referenceFiles: [{ fileName: 'big.md', content: body }],
+  }));
+  assert.match(prepared.userPrompt, /# big\.md/);
+  assert.doesNotMatch(
+    prepared.userPrompt,
+    /\[TRUNCATED: only the beginning of "big\.md"/,
+    '120k of one file must fit when the model window is used',
+  );
+  assert.ok(prepared.userPrompt.length > 64_000);
 });
 
 test('the TRUNCATED notice quotes the file\'s real size, not the size after the processing bound', async () => {
@@ -1195,6 +1233,7 @@ test('the TRUNCATED notice quotes the file\'s real size, not the size after the 
   const real = 'Z'.repeat(900_000);
   const prepared = prepareDirectAssistPrompt(baseInput({
     referenceFiles: [{ fileName: 'huge.md', content: real }],
+    maxContextChars: 64_000,
   }));
   assert.match(prepared.userPrompt, new RegExp(`The file is ${real.length} characters long`));
   assert.doesNotMatch(prepared.userPrompt, /The file is 64000 characters long/);
