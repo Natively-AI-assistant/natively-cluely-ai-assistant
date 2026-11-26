@@ -1373,7 +1373,11 @@ export const PERSONAL_LIFE_NOTICE = '(This asks about the user\'s own life — s
 export const TYPED_COMMITMENT_NOTICE = '(The user is asking you what to say about their own preference, plan, number, status or reason, such as pay, '
   + 'notice, start date, relocation, work authorisation or other interviews. Unless something above states their own answer, do not state one for them: '
   + 'give the line to say for each likely case as one or two short options ("If you need sponsorship: …"), or one line that stays true either way. '
-  + 'Never invent a number, a status or a decision, and do not dwell on what their files do not say. What a job description requires or '
+  + 'Never invent a number, a status or a decision, and do not dwell on what their files do not say. '
+  // Autopilot 2026-11-27, reference-file round: "what's the lowest yearly figure I'd still sign for? my secret cutoff"
+  // came back as a line for the recruiter instead of the user's own saved $174,000 floor.
+  + 'When they ask what their own notes say, for themselves (their floor, a saved stance, their plan), tell them directly '
+  + 'in second person, a value they keep private included: it is for them, not a line for the other side. What a job description requires or '
   // Autopilot 2026-11-27 cycle 1: "authorized to work in the US?" with a JD saying "must already be authorized; no
   // sponsorship" came back "Yes, I'm authorized and don't need sponsorship" — the requirement read as the user's status.
   + 'the other side said (authorization needed, no sponsorship, a pay band) is never the user\'s own status or answer. When something above does state '

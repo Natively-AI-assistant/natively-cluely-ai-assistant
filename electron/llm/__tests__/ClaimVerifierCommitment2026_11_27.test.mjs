@@ -3,7 +3,8 @@
 // a résumé loaded. Baseline (Natively API, deepseek-flash): "I'd be moving for this role" and an invented interview
 // status came back although the answer prompt's commitment notice sat next to the question. Technical Interview is
 // left out: "remote procedure call", "hybrid search" and "compensating transaction" would open the gate there.
-// NATIVELY_VERIFY_COMMITMENT=0 turns it off. String work only: no platform branches, same on macOS and Windows.
+// OFF BY DEFAULT: NATIVELY_VERIFY_COMMITMENT=1 turns it on (a 500k-file run lost a correct saved answer to it).
+// String work only: no platform branches, same on macOS and Windows.
 //
 // Run: npm run build:electron && node --test electron/llm/__tests__/ClaimVerifierCommitment2026_11_27.test.mjs
 import assert from 'node:assert/strict';
@@ -19,18 +20,25 @@ const LIVE = [
 ];
 const kind = (modeId, question, surface = 'spoken') => claimVerifierKind({ modeId, question, draft: "I'd be moving for this role.", surface, noDocuments: false });
 
-test('spoken commitment questions are checked in Looking for work, with documents loaded', () => {
+test('opted in: spoken commitment questions are checked in Looking for work, with documents loaded', () => {
+  process.env.NATIVELY_VERIFY_COMMITMENT = '1';
+  try {
+    for (const q of LIVE) {
+      assert.equal(isCommitmentQuestion(q), true, q);
+      assert.equal(kind('looking-for-work', q), 'personal', q);
+    }
+  } finally { delete process.env.NATIVELY_VERIFY_COMMITMENT; }
+});
+test('by default the one-pass decision stands for commitment questions', () => {
   delete process.env.NATIVELY_VERIFY_COMMITMENT;
-  for (const q of LIVE) {
-    assert.equal(isCommitmentQuestion(q), true, q);
-    assert.equal(kind('looking-for-work', q), 'personal', q);
-  }
+  for (const q of LIVE) assert.equal(kind('looking-for-work', q), null, q);
 });
 test('typed, Technical Interview, or switched off: unchanged one-pass decision', () => {
-  for (const q of LIVE) {
+  process.env.NATIVELY_VERIFY_COMMITMENT = '1';
+  try { for (const q of LIVE) {
     assert.equal(kind('looking-for-work', q, 'typed'), null, `typed: ${q}`);
     assert.equal(kind('technical-interview', q), null, `TI: ${q}`);
-  }
+  } } finally { delete process.env.NATIVELY_VERIFY_COMMITMENT; }
   process.env.NATIVELY_VERIFY_COMMITMENT = '0';
   try { for (const q of LIVE) assert.equal(kind('looking-for-work', q), null, `off: ${q}`); }
   finally { delete process.env.NATIVELY_VERIFY_COMMITMENT; }
