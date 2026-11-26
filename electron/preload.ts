@@ -1319,8 +1319,12 @@ interface ElectronAPI {
   getAutoAnswerAccess: () => Promise<{ available: boolean; allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
   setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
-  /** #630: the screen stopped mirroring and Natively, hidden during it, is back. */
-  onShownAfterMirror: (callback: () => void) => () => void;
+  /**
+   * #630: 'shown-after-mirror', the screen stopped mirroring and Natively,
+   * hidden during it, is back; 'shown-while-mirrored', the user showed it on a
+   * mirrored screen.
+   */
+  onMirrorNotice: (callback: (kind: 'shown-after-mirror' | 'shown-while-mirrored') => void) => () => void;
   getAutoAnswerModelStatus: () => Promise<AutoAnswerModelState>;
   installAutoAnswerModel: () => Promise<AutoAnswerModelState>;
   removeAutoAnswerModel: () => Promise<AutoAnswerModelState>;
@@ -3661,10 +3665,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
   getAutoAnswerAccess: () => ipcRenderer.invoke('auto-answer:get-access'),
   setAutoAnswerTrainingConsent: (granted: boolean) => ipcRenderer.invoke('auto-answer:set-training-consent', granted),
-  onShownAfterMirror: (callback: () => void) => {
-    const subscription = () => callback();
-    ipcRenderer.on('stealth:shown-after-mirror', subscription);
-    return () => { ipcRenderer.removeListener('stealth:shown-after-mirror', subscription); };
+  onMirrorNotice: (callback: (kind: 'shown-after-mirror' | 'shown-while-mirrored') => void) => {
+    const subscription = (_: unknown, kind: 'shown-after-mirror' | 'shown-while-mirrored') => callback(kind);
+    ipcRenderer.on('stealth:mirror-notice', subscription);
+    return () => { ipcRenderer.removeListener('stealth:mirror-notice', subscription); };
   },
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => {
     const subscription = (_: any, info: { reason: string }) => callback(info);

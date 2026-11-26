@@ -119,15 +119,16 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     const [eventsLoaded, setEventsLoaded] = useState(false);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    // The corner toast: the calendar refresh, or #630's "hidden while your
-    // screen was mirrored", told once the mirror ends.
-    const [notification, setNotification] = useState<'refreshed' | 'mirror' | null>(null);
+    // The corner toast: the calendar refresh, or #630's mirror notices:
+    // "hidden while your screen was mirrored", told once the mirror ends, and
+    // "your screen is mirrored", when the user shows Natively during one.
+    const [notification, setNotification] = useState<'refreshed' | 'shown-after-mirror' | 'shown-while-mirrored' | null>(null);
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
-        const off = window.electronAPI?.onShownAfterMirror?.(() => {
-            setNotification('mirror');
+        const off = window.electronAPI?.onMirrorNotice?.((kind) => {
+            setNotification(kind);
             if (timer) clearTimeout(timer);
-            timer = setTimeout(() => setNotification((n) => (n === 'mirror' ? null : n)), 8000);
+            timer = setTimeout(() => setNotification((n) => (n === kind ? null : n)), 8000);
         });
         return () => { off?.(); if (timer) clearTimeout(timer); };
     }, []);
@@ -182,7 +183,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     };
 
     // Keybinds
-    const { isShortcutPressed } = useShortcuts();
+    const { isShortcutPressed, shortcuts } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
     useEffect(() => {
         let mounted = true;
@@ -1373,7 +1374,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                             <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-md" />
                             {/* Light: a darker blue and no glow, as ProviderChangeNotice's ORB does;
                                 the dark theme's pale blue-300 vanished into the pale disc. */}
-                            {notification === 'mirror'
+                            {notification === 'shown-after-mirror' || notification === 'shown-while-mirrored'
                                 ? <MonitorOff size={15} className={`relative ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />
                                 : <RefreshCw size={15} className={`relative animate-[spin_2s_linear_infinite] ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />}
                         </div>
@@ -1381,10 +1382,14 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                         {/* Text Content */}
                         <div className="flex flex-col gap-0.5">
                             <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">
-                                {notification === 'mirror' ? t('Hidden while your screen was mirrored') : t('Refreshed')}
+                                {notification === 'shown-while-mirrored' ? t('Your screen is mirrored')
+                                    : notification === 'shown-after-mirror' ? t('Hidden while your screen was mirrored')
+                                    : t('Refreshed')}
                             </span>
                             <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">
-                                {notification === 'mirror' ? t('Extend your desktop to keep Natively on your screen.') : t('Synced with calendar')}
+                                {notification === 'shown-while-mirrored' ? `${t('Natively shows on the other display too. To hide it, press')} ${(shortcuts.toggleVisibility ?? []).join(isMac ? '' : '+')}.`
+                                    : notification === 'shown-after-mirror' ? t('Extend your desktop to keep Natively on your screen.')
+                                    : t('Synced with calendar')}
                             </span>
                         </div>
 

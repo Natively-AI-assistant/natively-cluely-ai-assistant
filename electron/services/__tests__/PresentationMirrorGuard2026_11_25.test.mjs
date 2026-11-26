@@ -131,7 +131,7 @@ test('Cmd/Ctrl+B while mirrored: what the guard hid comes back at once, and the 
   const { guard, state, hides, restores, tick } = rig({ mirror: MIRRORED });
   guard.sync(true);
   assert.deepEqual(hides, ['token-1']);
-  assert.equal(guard.noteUserReveal(), true, 'the caller skips its toggle, or it would hide the window again');
+  assert.equal(guard.noteUserReveal().restored, true, 'the caller skips its toggle, or it would hide the window again');
   assert.deepEqual(restores, ['token-1'], 'restored through the hide token (notepad and Settings too)');
   assert.equal(state.visible, true);
   guard.check(); // main runs check() on the restored windows' show events
@@ -149,8 +149,8 @@ test('Cmd/Ctrl+B while mirrored: what the guard hid comes back at once, and the 
 test('Cmd/Ctrl+B a second time while mirrored has nothing to restore, so the caller toggles as usual', () => {
   const { guard, restores } = rig({ mirror: MIRRORED });
   guard.sync(true);
-  assert.equal(guard.noteUserReveal(), true);
-  assert.equal(guard.noteUserReveal(), false);
+  assert.equal(guard.noteUserReveal().restored, true);
+  assert.equal(guard.noteUserReveal().restored, false);
   assert.deepEqual(restores, ['token-1']);
 });
 
@@ -159,7 +159,7 @@ test('Cmd/Ctrl+B just after the mirror ended, before the poll saw it: the due re
   guard.sync(true);
   assert.deepEqual(hides, ['token-1']);
   state.mirror = SINGLE; // no tick yet
-  assert.equal(guard.noteUserReveal(), true);
+  assert.equal(guard.noteUserReveal().restored, true);
   assert.deepEqual(restores, ['token-1']);
   state.mirror = MIRRORED; // the next mirror is protected: no user reveal carried over
   guard.check();
@@ -170,7 +170,7 @@ test('Cmd/Ctrl+B right after mirroring starts, before the poll saw it, still win
   const { guard, state, hides } = rig({ visible: false });
   guard.sync(true);
   state.mirror = MIRRORED; // no tick yet
-  assert.equal(guard.noteUserReveal(), false, 'nothing was hidden: the caller toggles');
+  assert.equal(guard.noteUserReveal().restored, false, 'nothing was hidden: the caller toggles');
   state.visible = true;
   guard.check();
   assert.deepEqual(hides, []);
@@ -179,7 +179,7 @@ test('Cmd/Ctrl+B right after mirroring starts, before the poll saw it, still win
 test('Cmd/Ctrl+B when not mirrored changes nothing', () => {
   const { guard, state, hides, tick } = rig();
   guard.sync(true);
-  assert.equal(guard.noteUserReveal(), false);
+  assert.equal(guard.noteUserReveal().restored, false);
   state.mirror = MIRRORED;
   tick();
   assert.deepEqual(hides, ['token-1']);
@@ -328,7 +328,7 @@ test('the mirror ending releases held windows the guard had not hidden yet', () 
 test('Cmd/Ctrl+B with only held windows (nothing hidden yet) reports a restore, so the caller skips its toggle', () => {
   const { guard, state } = gateRig();
   state.heldCount = 1;
-  assert.equal(guard.noteUserReveal(), true);
+  assert.equal(guard.noteUserReveal().restored, true);
   assert.equal(state.released, 1);
 });
 
@@ -347,7 +347,7 @@ test('a throwing release is logged and does not break the check', () => {
     log: (m) => logs.push(m),
   });
   guard.check();
-  assert.equal(guard.noteUserReveal(), false);
+  assert.equal(guard.noteUserReveal().restored, false);
   assert.ok(logs.some((m) => m.includes('release failed')));
 });
 
@@ -409,4 +409,29 @@ test('notice: not when Undetectable is turned off mid-mirror (the windows return
   state.undetectable = false;
   guard.sync(false);
   assert.equal(state.notices, 0);
+});
+
+test('Cmd/Ctrl+B while mirrored: the first press of each mirror asks for the notice, later ones do not', () => {
+  const { guard, state, tick } = rig({ mirror: MIRRORED });
+  guard.sync(true);
+  assert.deepEqual(guard.noteUserReveal(), { restored: true, firstWhileMirrored: true });
+  assert.deepEqual(guard.noteUserReveal(), { restored: false, firstWhileMirrored: false }, 'a toggle, not a new reveal');
+  state.mirror = SINGLE;
+  tick();
+  assert.equal(guard.noteUserReveal().firstWhileMirrored, false, 'not mirrored: nothing to tell');
+  state.mirror = MIRRORED;
+  tick();
+  assert.equal(guard.noteUserReveal().firstWhileMirrored, true, 'a new mirror tells again');
+});
+
+test('Cmd/Ctrl+B while mirrored with nothing hidden (the user had hidden it) still asks for the notice', () => {
+  const { guard } = rig({ visible: false, mirror: MIRRORED });
+  guard.sync(true);
+  assert.deepEqual(guard.noteUserReveal(), { restored: false, firstWhileMirrored: true });
+});
+
+test('Cmd/Ctrl+B with Undetectable off never asks for the notice', () => {
+  const { guard } = rig({ undetectable: false, mirror: MIRRORED });
+  guard.sync(false);
+  assert.equal(guard.noteUserReveal().firstWhileMirrored, false);
 });

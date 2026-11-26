@@ -17,7 +17,9 @@
 //   - The user presses Toggle Visibility (Cmd/Ctrl+B) while mirrored: their
 //     choice wins. What the guard hid comes back at once (the restore token is
 //     spent), and nothing is hidden again until mirroring stops and starts
-//     again.
+//     again. The first such press tells the user, in the window, that it is
+//     on the mirrored screen too: without it Natively just vanished and came
+//     back, with no word on why.
 //   - Mirroring stops, or Undetectable turns off: the windows hidden by the
 //     guard come back, without focus.
 //   - shouldHoldShow() feeds mirrorShowGate.ts, which keeps a window that
@@ -172,25 +174,31 @@ export function createPresentationMirrorGuard<Token>(deps: PresentationMirrorGua
      * through the same restore a screenshot uses, so the notepad or Settings
      * return along with the main window rather than being lost.
      *
-     * Call it BEFORE the toggle. Returns true when it restored windows; the
-     * caller then runs its own toggle only if the main window is still hidden
-     * (the guard hid only the notepad, say), or the toggle would hide again
-     * what was just restored.
+     * Call it BEFORE the toggle. `restored`: it restored windows; the caller
+     * then runs its own toggle only if the main window is still hidden (the
+     * guard hid only the notepad, say), or the toggle would hide again what
+     * was just restored. `firstWhileMirrored`: the first press of this mirror,
+     * so the caller tells the user, in the window just shown, that it is on
+     * the mirrored screen too (once per mirror, not on every toggle).
      */
-    noteUserReveal(): boolean {
+    noteUserReveal(): { restored: boolean; firstWhileMirrored: boolean } {
       // Read now rather than trust the last poll: a mirror that began less
       // than a poll ago would otherwise hide the window this press shows.
       const state = deps.isUndetectable() ? readMirrored() : null;
+      let firstWhileMirrored = false;
       if (state?.mirrored) {
         mirrored = true;
-        if (!userRevealed) deps.log?.('[PresentationMirror] shown by the user while mirrored');
+        if (!userRevealed) {
+          firstWhileMirrored = true;
+          deps.log?.('[PresentationMirror] shown by the user while mirrored');
+        }
         userRevealed = true;
       }
       // Also when the mirror ended less than a poll ago: the restore is due.
       const hadHidden = restoreToken !== null;
       restoreHidden();
       const released = releaseHeld();
-      return hadHidden || released > 0;
+      return { restored: hadHidden || released > 0, firstWhileMirrored };
     },
 
     /**

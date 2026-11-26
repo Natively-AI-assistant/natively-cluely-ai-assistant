@@ -198,8 +198,12 @@ export interface ElectronAPI {
   onOverlayHoverProbe?: (callback: (point: { x: number; y: number }) => void) => () => void
   dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
-  /** #630: the screen stopped mirroring and Natively, hidden during it, is back. */
-  onShownAfterMirror?: (callback: () => void) => () => void
+  /**
+   * #630: 'shown-after-mirror', the screen stopped mirroring and Natively,
+   * hidden during it, is back; 'shown-while-mirrored', the user showed it on a
+   * mirrored screen.
+   */
+  onMirrorNotice?: (callback: (kind: 'shown-after-mirror' | 'shown-while-mirrored') => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>
   // Local Whisper model info — used by SettingsOverlay to restrict the
   // Language / Accent selects to what the active local model accepts

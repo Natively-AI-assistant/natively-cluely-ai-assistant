@@ -9525,11 +9525,17 @@ export class AppState {
    * through the screenshot restore; `show` runs only when the main window is
    * still hidden after that. Running the toggle on a just-restored window
    * would hide it again.
+   *
+   * The first press of a mirror then tells the user, in the window just
+   * shown, that the screen is mirrored and Natively is on the other display
+   * too. Without that it vanished and came back with no word on why.
    */
   private revealAfterMirrorHide(show: () => void): void {
-    const restored = presentationMirrorGuard?.noteUserReveal() ?? false;
-    if (restored && this.windowHelper.isVisible()) return;
-    show();
+    const reveal = presentationMirrorGuard?.noteUserReveal();
+    if (!(reveal?.restored && this.windowHelper.isVisible())) show();
+    if (reveal?.firstWhileMirrored && this.windowHelper.isVisible()) {
+      this.sendMirrorNotice('shown-while-mirrored');
+    }
   }
 
   /**
@@ -9551,15 +9557,18 @@ export class AppState {
   }
 
   /**
-   * The mirror ended and the windows the guard hid are back (#630). Tell the
-   * main window, which shows a notice. Only now: during the mirror any notice
-   * would be on the projector too.
+   * The presentation-mirror notices (#630), shown by the main window:
+   *   - 'shown-after-mirror': the mirror ended and the windows the guard hid
+   *     are back. Only then: during the mirror the notice would be on the
+   *     projector too.
+   *   - 'shown-while-mirrored': the user showed Natively while mirrored, so it
+   *     is on the projector anyway; the notice says so, and how to hide it.
    */
-  public notifyShownAfterMirror(): void {
+  public sendMirrorNotice(kind: 'shown-after-mirror' | 'shown-while-mirrored'): void {
     const win = this.windowHelper.getCurrentWindowMode() === 'overlay'
       ? this.windowHelper.getOverlayWindow()
       : this.windowHelper.getLauncherWindow();
-    if (win && !win.isDestroyed()) win.webContents.send('stealth:shown-after-mirror');
+    if (win && !win.isDestroyed()) win.webContents.send('stealth:mirror-notice', kind);
   }
 
   public isScreenshotCaptureInProgress(): boolean {
@@ -12301,7 +12310,7 @@ if (process.env.THINKING_MATRIX === '1') {
       restore: (session) => appState.restoreWindowsAfterMirroring(session),
       merge: (earlier, later) => appState.mergeMirroringHides(earlier, later),
       releaseHeld: () => mirrorShowGate.releaseAll(),
-      onShownAfterMirror: () => appState.notifyShownAfterMirror(),
+      onShownAfterMirror: () => appState.sendMirrorNotice('shown-after-mirror'),
       // Never what keeps the process alive at quit.
       setInterval: (fn, ms) => {
         const handle = setInterval(fn, ms);

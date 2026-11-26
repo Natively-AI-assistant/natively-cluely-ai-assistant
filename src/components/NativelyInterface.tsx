@@ -1543,7 +1543,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [autoAnswerAccessNotice, setAutoAnswerAccessNotice] = useState(false);
   // #630: the screen was mirrored, so Natively stayed hidden; told once it
   // ends, when only the user can see it (presentationMirrorGuard.ts).
-  const [shownAfterMirrorNotice, setShownAfterMirrorNotice] = useState(false);
+  const [mirrorNotice, setMirrorNotice] = useState<'shown-after-mirror' | 'shown-while-mirrored' | null>(null);
   // A local model is slower than speech (main: `behind` on stt-status,
   // 2026-11-09). Its text still comes, later and later, so it is advice with a
   // close, said once per meeting; it used to count as a reconnect and flash
@@ -5687,12 +5687,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const off = window.electronAPI?.onShownAfterMirror?.(() => {
-      setShownAfterMirrorNotice(true);
+    const off = window.electronAPI?.onMirrorNotice?.((kind) => {
+      setMirrorNotice(kind);
       if (timer) clearTimeout(timer);
       // It describes a moment that has passed: gone after 20 s, like the
       // page-capture notice.
-      timer = setTimeout(() => setShownAfterMirrorNotice(false), 20_000);
+      timer = setTimeout(() => setMirrorNotice(null), 20_000);
     });
     return () => { off?.(); if (timer) clearTimeout(timer); };
   }, []);
@@ -11799,7 +11799,7 @@ Provide only the answer, nothing else.`;
     guide: overlayGuide.wants,
     trial: !!trial.banner,
     'auto-answer-access': autoAnswerAccessNotice,
-    'mirror-hidden': shownAfterMirrorNotice,
+    'mirror-notice': mirrorNotice !== null,
     'auto-stop': autoStop.stopsAt !== null,
     'last-time': !!lastTime.recap,
     'capture-fallback': !!captureFallback,
@@ -12379,19 +12379,24 @@ Provide only the answer, nothing else.`;
               )}
               </ChromeFold>
 
-              {/* #630: Natively hid itself while the screen was mirrored to a
-                  projector or another display, and is back now that the mirror
-                  ended. Shown only after it ends: during it, any notice would be
-                  on the shared screen too. */}
-              <ChromeFold show={shownAfterMirrorNotice && bannerSlots.has('mirror-hidden')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-mirror-hidden">
-              {shownAfterMirrorNotice && (
+              {/* #630, the screen mirrored to a projector or another display:
+                  - shown-after-mirror: Natively hid itself during the mirror and
+                    is back now it ended. Only after it ends: during it, the
+                    notice would be on the shared screen too.
+                  - shown-while-mirrored: the user pressed Toggle Visibility
+                    while mirrored, so Natively is on the shared screen anyway.
+                    Say so, and how to hide it again. */}
+              <ChromeFold show={mirrorNotice !== null && bannerSlots.has('mirror-notice')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-mirror-notice">
+              {mirrorNotice && (
                 <OverlayBanner
                   className="mx-4"
                   tone="warning"
                   icon={<MonitorOff strokeWidth={2.2} />}
-                  title={t('Hidden while your screen was mirrored')}
-                  message={t('A mirrored display shows everything on your screen, so Natively stayed off both. To keep it on your own screen while you present, extend your desktop instead.')}
-                  onDismiss={() => setShownAfterMirrorNotice(false)}
+                  title={mirrorNotice === 'shown-while-mirrored' ? t('Your screen is mirrored') : t('Hidden while your screen was mirrored')}
+                  message={mirrorNotice === 'shown-while-mirrored'
+                    ? `${t('Natively is showing on the other display too. To hide it, press')} ${(shortcuts.toggleVisibility ?? []).join(isMac ? '' : '+')}.`
+                    : t('A mirrored display shows everything on your screen, so Natively stayed off both. To keep it on your own screen while you present, extend your desktop instead.')}
+                  onDismiss={() => setMirrorNotice(null)}
                   dismissLabel={t('Dismiss')}
                 />
               )}
