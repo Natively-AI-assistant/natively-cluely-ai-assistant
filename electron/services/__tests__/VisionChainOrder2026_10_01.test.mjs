@@ -373,7 +373,6 @@ test('the rung carrying the selected model itself is tried once: the vendor\'s f
   assert.equal((await attemptsOf(VENDORS, 'gemini-2.5-flash')).gemini_selected, 1);
 });
 test('any other leading selection is tried twice, not three times', async () => {
-  assert.equal((await attemptsOf(VENDORS, 'natively')).natively, 2);
   assert.equal((await attemptsOf(EVERYTHING, 'openrouter/openai/gpt-4o')).openrouter, 2);
   assert.equal((await attemptsOf(['openai', 'gemini'], 'gemini-3.8-flash')).gemini_flash, 2);
   assert.equal((await attemptsOf(VENDORS, 'gpt-5.4')).openai, 2, 'the fixed rung when it IS the selection');
@@ -391,7 +390,7 @@ test('no selection rung, or one that does not lead: nothing is capped', async ()
   const cooling = await attemptsOf(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() + 60_000) });
   assert.equal(cooling.fluxion, undefined, 'a selection whose breaker is open is tried last, like any other rung');
 });
-test('through the engine: an unreachable selected provider is tried twice, then the next rung answers', async () => {
+test('through the engine: an unreachable selected provider is tried twice (request + parallel retry), then the next rung answers', async () => {
   let natively = 0;
   const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
     streamWithNatively: async function* () { natively++; throw new Error('Natively API connect timeout (4s)'); },
@@ -415,7 +414,78 @@ test('the engine\'s log names the budget actually in force for a capped rung', a
     });
     for await (const _ of h.streamVisionWithFallback(REQ)) { /* drain */ }
   } finally { console.log = real.log; console.warn = real.warn; }
+  // Natively's second try is its parallel retry, inside the one attempt (2026-11-26).
   const natively = lines.filter((l) => /\[Vision\] Natively API attempt/.test(l));
-  assert.deepEqual(natively.map((l) => l.match(/attempt (\d\/\d)/)[1]), ['1/2', '2/2']);
+  assert.deepEqual(natively.map((l) => l.match(/attempt (\d\/\d)/)[1]), ['1/1']);
   assert.match(lines.find((l) => /committed to OpenAI/.test(l)), /attempt 1\/3/, 'an uncapped fallback rung still reads 1/3');
+});
+
+// ── 2026-11-26: a slow Natively screenshot request is not killed at 4 s ──────
+// The API sends its headers with the first token, so the 4 s "connect" timer
+// measured the vision model's first token and killed healthy requests (2.1-4.0 s
+// measured, often over). Now a second identical request starts beside a slow
+// one and whichever answers first is shown.
+
+const abortable = (sig) => new Promise((_, rej) => {
+  const fail = () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+  if (sig.aborted) fail(); else sig.addEventListener('abort', fail, { once: true });
+});
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('the Natively screenshot rung carries a parallel retry and no 4 s connect limit', async () => {
+  const withSpare = (await chainOf(['openai', 'natively'], 'natively')).chain.find((p) => p.id === 'natively');
+  assert.equal(withSpare.hedgeWith?.id, 'natively#hedge', 'its own id, so its breaker is judged apart from the primary');
+  assert.equal(withSpare.maxAttempts, 1, 'the parallel retry IS the second try: still at most two requests');
+  assert.equal(withSpare.ttftTimeoutMs, 9000, 'gives up early enough for the spare to answer inside the 13 s turn');
+
+  const alone = (await chainOf(['natively'], 'natively')).chain.find((p) => p.id === 'natively');
+  assert.ok(alone.hedgeWith, 'the parallel retry does not depend on a spare');
+  assert.equal(alone.maxAttempts, undefined, 'the only rung keeps the engine default');
+  assert.equal(alone.ttftTimeoutMs, 20000, 'the vision first-token budget, not 9 s');
+
+  let connectMs = null;
+  const h = Object.assign(helper(['natively'], 'natively'), {
+    streamWithNatively: async function* (_u, _s, _i, _sig, ms) { connectMs = ms; yield 'seen'; },
+  });
+  await drain(h.streamVisionWithFallback(REQ));
+  assert.equal(connectMs, 20000, 'the request is not handed the 4 s interactive connect timeout');
+});
+
+test('a slow first request that answers first is shown; the parallel retry is cancelled', async () => {
+  let calls = 0; let retryStartedAt = 0; let retryCancelled = false; let openai = 0;
+  const startedAt = Date.now();
+  const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
+    streamWithNatively: async function* (_u, _s, _i, sig) {
+      const me = ++calls;
+      if (me === 1) { await Promise.race([sleep(4600), abortable(sig)]); yield 'from first'; return; }
+      retryStartedAt = Date.now();
+      try { await abortable(sig); } catch (e) { retryCancelled = true; throw e; }
+    },
+    streamWithOpenaiMultimodal: async function* () { openai++; yield 'openai'; },
+  });
+  const out = [];
+  for await (const piece of h.streamVisionWithFallback(REQ)) out.push(piece);
+  assert.deepEqual(out, ['from first'], 'the first request was not killed at 4 s');
+  assert.equal(calls, 2, 'one parallel retry, no more');
+  assert.ok(retryStartedAt - startedAt >= 3900, `the retry waits ~4 s (started at ${retryStartedAt - startedAt} ms)`);
+  await sleep(20);
+  assert.ok(retryCancelled, 'the losing request is cancelled');
+  assert.equal(openai, 0, 'no spare is used when Natively answers');
+});
+
+test('when the parallel retry answers first it is shown and the first request is cancelled', async () => {
+  let calls = 0; let firstCancelled = false;
+  const h = Object.assign(helper(['natively'], 'natively'), {
+    streamWithNatively: async function* (_u, _s, _i, sig) {
+      const me = ++calls;
+      if (me === 1) { try { await abortable(sig); } catch (e) { firstCancelled = true; throw e; } }
+      yield 'from retry';
+    },
+  });
+  const out = [];
+  for await (const piece of h.streamVisionWithFallback(REQ)) out.push(piece);
+  assert.deepEqual(out, ['from retry']);
+  assert.equal(calls, 2);
+  await sleep(20);
+  assert.ok(firstCancelled, 'the hung first request is cancelled once the retry answers');
 });

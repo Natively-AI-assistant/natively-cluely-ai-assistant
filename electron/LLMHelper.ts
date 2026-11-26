@@ -487,6 +487,22 @@ const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
 const DIRECT_ASSIST_CONNECT_TIMEOUT_MS = 15_000;
 const DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS = 30_000;
 
+// Live screenshot turns on the Natively API (2026-11-26). The API writes its
+// SSE headers together with the first token, so INTERACTIVE_CONNECT_TIMEOUT_MS
+// on this request measures image upload + the vision model's first token, not
+// a connect: 2.1-4.0s measured, and over 4s often enough that the 4s timer
+// killed a healthy request, the retry was killed the same way, and 8s of the
+// 13s turn were gone with no answer. The request is no longer killed at 4s.
+// If it has not produced a token by NATIVELY_VISION_HEDGE_MS, an identical
+// request starts beside it and whichever answers first is shown; the other is
+// cancelled. A request that fails outright starts the copy at once. The copy
+// replaces the old second attempt, so a turn still sends at most two.
+const NATIVELY_VISION_HEDGE_MS = 4_000;
+// With a working spare provider behind it, the pair is given up at 9s so the
+// spare still has ~4s of the 13s turn (LIVE_TOTAL_HARD_TIMEOUT_MS). With no
+// spare, the turn's own ceiling is the only limit.
+const NATIVELY_VISION_TTFT_WITH_SPARE_MS = 9_000;
+
 // First-useful-token budget for the Natively gateway on the TEXT path. Larger than
 // the shared 2.5s text default because the gateway's server-side fallback chain can
 // land on MiniMax (first token 3.3-7.7s); a 2.5s cap aborts it before it speaks.
@@ -10302,11 +10318,19 @@ let isMultimodal = !!(imagePaths?.length);
     const ordered = await this.buildVisionChain(req);
 
     // Delegate the first-token-commit + retry + circuit-breaker state machine.
-    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
-    // flash → pro), so no provider sets hedgeWith and nothing is raced.
+    // Hedging is on, but only the Natively rung sets hedgeWith (its parallel
+    // retry, see NATIVELY_VISION_HEDGE_MS); the Gemini cascade stays strict
+    // serial (flash-lite → flash → pro) and nothing else is raced. The delay
+    // floor is 4s; the engine's TTFT average (×0.6) can push it to 6s at most.
     yield* runStreamingVisionFallback(
       ordered,
-      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
+      {
+        ...DEFAULT_VISION_FALLBACK_CONFIG,
+        hedgeEnabled: true,
+        hedgeDelayDefaultMs: NATIVELY_VISION_HEDGE_MS,
+        hedgeDelayMinMs: NATIVELY_VISION_HEDGE_MS,
+        hedgeDelayMaxMs: Math.max(NATIVELY_VISION_HEDGE_MS, DEFAULT_VISION_FALLBACK_CONFIG.hedgeDelayMaxMs),
+      },
       this.visionHealth,
       {
         log: (m) => console.log(m),
@@ -10442,8 +10466,14 @@ let isMultimodal = !!(imagePaths?.length);
           open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig, groqVisionModel) });
       }
       if (this.hasNatively()) {
+        // Connect budget = the rung's own first-token budget, so the 4s
+        // interactive timer never kills a screenshot request; the parallel
+        // retry (hedgeWith, NATIVELY_VISION_HEDGE_MS) covers a slow one.
+        const openNatively = (sig: AbortSignal) => this.streamWithNatively(userContent, systemPrompt, imagePaths, sig, FLASH_TTFT_MS);
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
-          open: (sig) => this.streamWithNatively(userContent, systemPrompt, imagePaths, sig) });
+          open: openNatively,
+          // Its own id so the primary's breaker does not switch its retry off.
+          hedgeWith: { id: 'natively#hedge', name: 'Natively API (parallel retry)', open: openNatively } });
       }
       // OpenAI-compatible gateways. Added 2026-09-03: this chain intercepts EVERY
       // image-bearing request and returns, so a provider missing here can never
@@ -10712,7 +10742,16 @@ let isMultimodal = !!(imagePaths?.length);
     const isCooling = (p: VisionStreamProvider) => (this.visionHealth.get(p.id)?.openUntil ?? 0) > nowMs;
     const leading = front.filter(p => ordered.includes(p) && (p.isLocal || !isCooling(p)));
     if (leading.length > 0 && ordered.some(p => !leading.includes(p) && !isCooling(p))) {
-      for (const p of leading) p.maxAttempts = p.id.endsWith('_selected') ? 1 : 2;
+      for (const p of leading) {
+        // A hedged rung's second request is its parallel retry, so it gets
+        // one attempt, and gives up early enough for the spare to answer.
+        if (p.hedgeWith) {
+          p.maxAttempts = 1;
+          p.ttftTimeoutMs = Math.min(p.ttftTimeoutMs ?? NATIVELY_VISION_TTFT_WITH_SPARE_MS, NATIVELY_VISION_TTFT_WITH_SPARE_MS);
+          continue;
+        }
+        p.maxAttempts = p.id.endsWith('_selected') ? 1 : 2;
+      }
     }
 
     if (ordered.length === 0) {
