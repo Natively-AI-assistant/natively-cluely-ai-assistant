@@ -16,6 +16,7 @@
 // nothing later in the prompt can appear to supersede them, evidence late and
 // explicitly framed as untrusted data.
 
+import { COMMITMENT_QUESTION_RE, JOB_SEARCH_STATUS_RE } from '../../llm/commitmentQuestion';
 import type { TurnDecision, EvidenceItem } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
 import { packContext, estimateTokens, type PackBudget, type PackedContext } from './context-packer';
@@ -472,6 +473,14 @@ function fallbackGuidance(d: Readonly<TurnDecision>, p: ModePolicy): string {
     case 'SOURCE_FIRST':
     default:
       if (d.claimRequirements.some((c) => c.claimType === 'USER_MOTIVATION')) {
+        // Interview modes (autopilot 2026-11-27, owner decision (b): no disclaimer, no invented facts). The
+        // generic line below made the candidate say "the résumé doesn't say why I built it" to an interviewer.
+        if (OWN_LIFE_MODES.has(p.id)) {
+          return 'Use the evidence first. This question asks about a REASON or motivation. If the evidence states it, '
+            + 'give it. If it does not, give the merit of the choice itself, in first person: what it solves and why it '
+            + 'fits the situation the evidence describes. Never invent a backstory, a feeling or an event, and never say '
+            + 'the reason is not written down, not in the résumé, or something you would need to check.';
+        }
         return 'Use the evidence first. This question asks about a REASON or motivation: if the '
           + 'evidence does not state it, say so explicitly before offering any rationale, and label '
           + 'that rationale as your own reasoning rather than as something the material says.';
@@ -1193,8 +1202,16 @@ function privacyWithholdingNotice(scopes: readonly string[] | undefined, hasEvid
 // NUMBERS. This section fires only on that question shape, only with evidence.
 const EXACT_VALUE_ASK_RE = /\b(?:exact(?:ly)?|precise(?:ly)?|specific)\b[^.?!]{0,80}\b(?:values?|settings?|numbers?|constants?|thresholds?|timeouts?|base|multiplier|rates?|sizes?|limits?|config(?:uration)?s?|parameters?|figures?|versions?|counts?)\b|\b(?:what|which)\s+(?:exact|specific|precise)\b/i;
 
-function exactValueGuard(question: string, hasEvidence: boolean): string {
+function exactValueGuard(question: string, hasEvidence: boolean, modeId?: string): string {
   if (!hasEvidence || !EXACT_VALUE_ASK_RE.test(question)) return '';
+  if (modeId && OWN_LIFE_MODES.has(modeId)) {
+    // Interview modes: "the exact base isn't in my notes" said to an interviewer exposes the machinery and reads
+    // as not knowing one's own work (autopilot 2026-11-27, owner decision (b)).
+    return '# Exact value requested\nThe question asks for an exact setting or number. Give it ONLY if an evidence block '
+      + 'above states that figure, and quote it as stated. If none does, never mention notes, documents or the résumé and '
+      + 'never say you would need to check: give the figures the evidence does state about it, then explain how that '
+      + 'value is chosen or what it depends on. Never supply a plausible-sounding constant in its place.';
+  }
   return '# Exact value requested\nThe question asks for an exact setting or number. Give it ONLY if an evidence block '
     + 'above states that figure, and quote it as stated. If no block states that exact figure, say so in one short '
     + 'clause (for example "the exact base isn\'t in my notes"), then describe what the evidence DOES state about it, '
@@ -1314,7 +1331,7 @@ export function heardQuestionPerspective(modeId: string | undefined): string {
  * experience the résumé does not show (10/40 Looking-for-work answers). The
  * rule is restated next to the question only when the question asks for it.
  */
-const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|there|to)|commut\w*|in[- ]office|on-?site|hybrid|remote(?:ly)?|travel\w*|salary|base pay|compensation|pay(?:ing)? (?:range|expectations?)|in terms of (?:base|pay|salary|comp)|notice period|start date|when (?:can|could) you start|available to start|why (?:did|do|would) you (?:leave|want to leave)|why'?d you leave|why leave|reason for leaving|gap (?:in|on|before|after|between) (?:your|the) |(?:a |the |that |this )?gap (?:of|there)|what happened (?:there|then|during|in that|between)|time off|career break|between (?:jobs|roles)|why (?:the|a) (?:switch|change|move)|weakness|getting better at|(?:does|would) that work for you|are you (?:ok|okay|comfortable|open|willing) (?:with|to))\b/i;
+const PERSONAL_PREFERENCE_RE = COMMITMENT_QUESTION_RE;
 const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated|taken|studied|completed|attended)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b|\bhow long have you (?:been|worked|done)\b|\b(?:what'?s|tell me about|what is) your (?:own )?background\b|\bwere you (?:ever )?(?:an?|in)\b|\bare you familiar with\b|\bdo you know (?:much about )?(?:the |our )?\w+ (?:space|industry|market|well)\b/i;
 const NO_COMMITMENT_MODES: ReadonlySet<string> = new Set(['recruiting', 'lecture']);
 
@@ -1340,8 +1357,24 @@ export const PERSONAL_LIFE_NOTICE = '(This asks about the user\'s own life — s
   + 'without stating it ("Happy to get into that. What would be most useful to hear?"). A health, legal or official question is theirs to answer: '
   + 'say nothing on their behalf.)';
 
+/**
+ * TYPED, in the job modes: the user asks Natively what to say about their own salary, notice, availability, relocation,
+ * legal status or job search (autopilot 2026-11-27). The baseline (résumé + JD loaded, Natively API) answered
+ * "recruiter asked if I'm authorized to work in the US. not on my resume. what's a clean answer?" with an invented "I'm
+ * authorized to work in the US", and "she asked current comp + notice, neither on my resume" with "aren't on my résumé,
+ * so I won't guess" — a fact made up for them, or the machinery instead of help. Options that each stay true are
+ * neither, and are not a template.
+ */
+export const TYPED_COMMITMENT_NOTICE = '(The user is asking you what to say about their own preference, plan, number, status or reason, such as pay, '
+  + 'notice, start date, relocation, work authorisation or other interviews. Unless something above states their own answer, do not state one for them: '
+  + 'give the line to say for each likely case as one or two short options ("If you need sponsorship: …"), or one line that stays true either way. '
+  + 'Never invent a number, a status or a decision, and do not dwell on what their files do not say.)';
+
 export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean, ownWords = false): string {
-  if (!heard) return '';
+  if (!heard) {
+    const tq = String(question ?? '');
+    return modeId && OWN_LIFE_MODES.has(modeId) && (PERSONAL_PREFERENCE_RE.test(tq) || JOB_SEARCH_STATUS_RE.test(tq)) ? TYPED_COMMITMENT_NOTICE : '';
+  }
   const q = String(question ?? '');
   // Lecture and recruiting take no commitment notice: a lecturer's "have you
   // all read chapter 3?" is not about the user. But once the user has written
@@ -1354,7 +1387,7 @@ export function personalCommitmentNotice(question: string, modeId: string | unde
   }
   const noCommitment = Boolean(modeId && NO_COMMITMENT_MODES.has(modeId));
   if (!noCommitment && modeId && PERSONAL_LIFE_MODES.has(modeId) && PERSONAL_LIFE_RE.test(q)) return PERSONAL_LIFE_NOTICE;
-  if (!noCommitment && PERSONAL_PREFERENCE_RE.test(q)) {
+  if (!noCommitment && (PERSONAL_PREFERENCE_RE.test(q) || (Boolean(modeId) && OWN_LIFE_MODES.has(modeId as string) && JOB_SEARCH_STATUS_RE.test(q)))) {
     return '(This asks for the user\'s own preference, commitment or reason. Unless something above states the user\'s own answer, '
       + 'do not decide it for them: no yes or no, no reason, no number of their own. Answer so it stays true either way, open or '
       + 'conditional, naming what they would weigh or asking the next practical question. What the other side stated, such as a '
@@ -1534,15 +1567,29 @@ export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in th
  * surfaces), 0/5 typed and 2/5 on the hotkey (deepseek-flash); a question whose
  * story IS in the evidence stayed fully grounded (0/5 invented) with or without it.
  */
-function evidenceStoryGuard(d: Readonly<TurnDecision>, hasEvidence: boolean, ownWords = false): string {
+function evidenceStoryGuard(d: Readonly<TurnDecision>, hasEvidence: boolean, ownWords = false, modeId?: string): string {
   if (!hasEvidence || !d.claimRequirements.some((c) => /^USER_/.test(c.claimType))) return '';
   return '# A story from the evidence\nTell it only with what the evidence states'
     + (ownWords ? ' and what the user wrote about themselves' : '')
     + ': the people, conflicts, events, numbers '
     + 'and outcomes. Do not add a stakeholder, a disagreement, a colleague, a reaction or a result the evidence does not '
     + 'name. If the evidence holds no story of the kind asked, say how the user handles that kind of situation, and '
-    + 'mention a real project only for what the evidence says about it.';
+    + 'mention a real project only for what the evidence says about it.'
+    + (modeId && OWN_LIFE_MODES.has(modeId) ? BEYOND_THE_RECORD : '');
 }
+
+/**
+ * Interview follow-ups that ask for more than the résumé holds about a real item ("how did you know it worked?",
+ * "what was the root cause?", "how do you run that review hour?"). Measured on the autopilot baseline (2026-11-27,
+ * deepseek-flash via the Natively API): the answer either invented the missing specifics (an alert design, a review
+ * format, a screen-reader anecdote) or narrated the gap ("what the evidence gives me…", "I'd rather pull the runbook").
+ * The owner's rule (b) is neither: the stated facts, then the method, with no new events and no disclaimer.
+ */
+const BEYOND_THE_RECORD = ' When the question asks for more about a real item than the evidence states (how exactly, '
+  + 'how it was verified, the root cause, the alert, the format, who was involved), give the stated facts first, then '
+  + 'answer the rest as method: how that is verified, decided or run, and why it works, as your approach in general '
+  + 'terms. Add no event, finding, number, person, tool or anecdote the evidence does not state, and never say a detail '
+  + 'is not written down, not in front of you, or something you would check.';
 
 /**
  * TODAY (2026-09-30). The prompt carried no date, so a partner price sheet
@@ -1803,7 +1850,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
         + 'retriever\'s widened selection, not the whole corpus: if it may not cover every file, say so '
         + 'in one closing sentence rather than presenting the list as complete.'
       : ''),
-    push('exact_value', exactValueGuard(d.resolvedQuestion, Boolean(packed.evidenceBlock))),
+    push('exact_value', exactValueGuard(d.resolvedQuestion, Boolean(packed.evidenceBlock), policy.id)),
     push('capabilities', `# Capabilities\n${capabilityLines(policy)}`),
     // LAST, and STATIC: see USER_INSTRUCTION_AUTHORITY_NOTE. Recency inside the
     // system prompt puts it after the coding contract it has to outrank.
@@ -1920,7 +1967,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
         + `\n${input.conversationSummary}`)
       : '',
     push('today', todayNotice(input.now ?? new Date(), d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
-    push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock), hasOwnWords)),
+    push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock), hasOwnWords, policy.id)),
     push('personal_commitment', commitmentNotice),
     push('calculation', calculationNotice(d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
     push('refinement', refinementNotice(d.resolvedQuestion, input.conversationSummary, input.heardQuestion === true)),
