@@ -108,7 +108,9 @@ export async function codeReposBlockForAnswers(
     const text = await (require('./repoBrief') as typeof import('./repoBrief')).repoContextForQuestion(question, opts);
     if (!text.trim()) return '';
     const composer = require('../context-intelligence/generation/prompt-composer') as typeof import('../context-intelligence/generation/prompt-composer');
-    return composer.codeReposSection(text);
+    // No question section on these paths to sit after: the answer shape
+    // follows the block directly.
+    return [composer.codeReposSection(text), composer.repoAnswerShapeSection(text)].filter(Boolean).join('\n\n');
   } catch {
     return '';
   }

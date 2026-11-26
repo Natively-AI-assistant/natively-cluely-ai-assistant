@@ -51,10 +51,39 @@ const STOP = new Set((
   + 'where which while who why will with would you your yours about tell explain walk through describe talk give '
   + 'please also more some any all one get got use used using work works working part parts thing things way').split(' '));
 
-/** Words that point at the user's own code without naming it. */
-const OWN_CODE_RE = /\b(your|my|this|the|that)\s+(own\s+)?(project|projects|repo|repository|repositories|codebase|code base|code|app|application|implementation|github|side project|backend|frontend|api|service)\b/i;
-/** Asked about the candidate's own past work: "how did you...", "have you built...". */
-const PAST_WORK_RE = /\b(did you|have you|had you|you('ve| have)? (built|build|made|implemented|designed|wrote|written|used|handled|chose|picked|structured|tested|deployed))\b/i;
+/**
+ * Words that point at the user's own code without naming it. "The code", "the
+ * API", "the backend" are how general questions talk too ("How would you
+ * secure the API?"), so with the|this|that only the words that mean a project
+ * count; "your"/"my" count with any of them.
+ */
+const OWN_CODE_RE = /\b(?:(?:your|my)\s+(?:own\s+)?(?:project|projects|repo|repository|repositories|codebase|code base|code|app|application|implementation|github|side project|backend|frontend|api|service)|(?:this|the|that)\s+(?:project|repo|repository|codebase|side project)|(?:your|my|this|the|that)\s+github)\b/i;
+/**
+ * Asked about the candidate's own past work: "how did you...", "have you built...".
+ * Past forms only: "how would you build X" is a design question, not one about their code.
+ */
+const PAST_WORK_RE = /\b(did you|have you|had you|you('ve| have)? (built|made|implemented|designed|wrote|written|used|handled|chose|picked|structured|tested|deployed))\b/i;
+/**
+ * Everyday words that turn up in repository names (SonyConnect, ai-assistant,
+ * chat-app, full-stack-template). Alone they do not name the repository:
+ * "how do devices connect?" is not about SonyConnect. The whole name, or a
+ * word of it not on this list ("sony", "proshop", "microblog"), still does.
+ * Stemmed like terms().
+ */
+const COMMON_NAME_WORDS = new Set((
+  'connect connection assistant agent app application api server client web website site service chat blog shop store '
+  + 'data user auth login test demo project react node python java javascript typescript tool bot clone starter template '
+  + 'backend frontend mobile android ios system manager tracker search cache queue full stack simple basic portfolio '
+  + 'todo game note task social media music video audio image photo file cloud home dashboard admin core lib library '
+  + 'sdk cli kit hub lab net code dev learn course tutorial example sample machine model smart auto easy mini open free '
+  + 'real time live map weather new book movie food health finance bank pay payment ecommerce commerce market analytic '
+  + 'monitor engine framework platform network design plugin extension helper util config setup script docker deploy '
+  + 'build generator analyzer detector scanner finder reader writer editor viewer player recorder converter translator '
+  + 'summarizer classifier recommender meeting interview transcript transcription speech voice text email message '
+  + 'notification event calendar schedule booking order product cart checkout review rating comment post feed profile '
+  + 'account dashboard report form survey quiz exam school student job resume').split(' ').map((w) => stem(w)));
+/** A function name said aloud ("get user", "set up") needs this many words: two everyday words are just speech. */
+const SPOKEN_SYMBOL_MIN_WORDS = 3;
 /** Distinct question words one part of a brief must share for an unnamed past-work question to match. */
 const PAST_WORK_MIN_OVERLAP = 3;
 /**
@@ -160,6 +189,52 @@ interface RepoMatch {
   namedSymbols: RepoBriefIndexSymbol[];
 }
 
+/**
+ * How sure the match is. 'sure': the question names the repository, one of its
+ * functions or files, or follows up on a question that did; the brief is the
+ * main source. 'possible': an unnamed "how did you handle X" that shares words
+ * with the brief; the answer uses it only if it fits. Below that nothing is
+ * attached and the answer is a general one. No level ever refuses: a brief
+ * that does not cover the question leaves a general answer (see
+ * codeReposSection).
+ */
+export type RepoMatchConfidence = 'sure' | 'possible';
+/** A name, a function or a file scores at least 3; unnamed matches score 1 or 2. */
+const SURE_MIN_SCORE = 3;
+export function matchConfidence(score: number, carried: boolean): RepoMatchConfidence {
+  return carried || score >= SURE_MIN_SCORE ? 'sure' : 'possible';
+}
+/** Written under a 'possible' repository's header, for the prompt's rule on it. */
+export const POSSIBLE_MATCH_NOTE = 'Possible match: the question does not name this project. Use it only if it fits the question.';
+/**
+ * Written under a repository's header when no part of its brief is about what
+ * was asked ("how did you handle rate limiting in Microblog?" and the brief
+ * has none). The composer sees its first words (REPO_NOT_COVERED_MARK) and
+ * puts the answer shape right after the question (repoAnswerShapeSection):
+ * live 2026-11-26 a rule here alone still drew "Microblog doesn't have rate
+ * limiting" and "I didn't do it there".
+ */
+export const NOT_COVERED_NOTE = 'Not in this brief: no part below is directly about what was asked. Use what below relates; how to answer is set out after the question.';
+/** Question words that say nothing about the topic, for the coverage check. */
+const NOT_TOPIC = new Set(['handle', 'handl', 'app', 'application', 'project', 'add', 'code', 'improve', 'build', 'built',
+  'implement', 'make', 'made', 'set', 'go', 'deal', 'approach', 'design', 'write', 'new'].map((w) => stem(w)));
+/**
+ * Does one part of the brief hold most of the question's topic? Topic words
+ * leave out the repository's name, words that name no topic ("handle", "add"),
+ * and words in a fifth or more of the brief's parts ("api" in a web app's
+ * brief says nothing about rate limiting). More than half of what is left
+ * must be in one part: "rate limiting" against a part about pagination
+ * "limit"s is not covered.
+ */
+function coversQuestion(question: string, b: ReadyBrief, units: Unit[]): boolean {
+  const name = new Set([...terms(b.entry.repo), ...terms(b.entry.projectName || '')]);
+  const everywhere = (t: string) => units.filter((u) => u.terms.has(t)).length * 5 >= units.length;
+  const topic = [...terms(question)].filter((t) => !name.has(t) && !NOT_TOPIC.has(t) && !everywhere(t));
+  if (!topic.length) return true;
+  const best = units.reduce((n, u) => Math.max(n, topic.filter((t) => u.terms.has(t)).length), 0);
+  return best * 2 > topic.length;
+}
+
 /** The most question words any one part of this brief shares. */
 function sharedWords(q: Set<string>, b: ReadyBrief): number {
   return briefUnits(b.result.brief).units.reduce((n, u) => Math.max(n, [...q].filter((t) => u.terms.has(t)).length), 0);
@@ -174,26 +249,36 @@ export function matchRepos(question: string, briefs: ReadyBrief[]): RepoMatch[] 
   const out: RepoMatch[] = [];
   for (const b of briefs) {
     let score = 0;
-    // Named: any word of the repository's name ("proshop" of proshop_mern), or
-    // half the words of the résumé project's name.
-    const repoTerms = terms(b.entry.repo);
-    const projectTerms = terms(b.entry.projectName || '');
-    const projectHits = [...projectTerms].filter((t) => q.has(t)).length;
-    if ([...repoTerms].some((t) => q.has(t)) || (projectTerms.size && projectHits / projectTerms.size >= 0.5)) score += 6;
+    // Named: the whole name ("sony connect", "SonyConnect"), a word of it that
+    // is not an everyday word ("proshop" of proshop_mern), or half the
+    // résumé project's name the same way.
+    const nameSaid = (name: string): boolean => {
+      const spoken = spokenForm(name).trim();
+      if (!spoken) return false;
+      return qSpoken.includes(` ${spoken} `) || qSpoken.includes(` ${spoken.replace(/ /g, '')} `);
+    };
+    const distinctive = (t: string) => !COMMON_NAME_WORDS.has(t);
+    const repoTerms = [...terms(b.entry.repo)].filter(distinctive);
+    const projectTerms = [...terms(b.entry.projectName || '')].filter(distinctive);
+    const projectHits = projectTerms.filter((t) => q.has(t)).length;
+    if (nameSaid(b.entry.repo) || (b.entry.projectName && nameSaid(b.entry.projectName))
+      || repoTerms.some((t) => q.has(t)) || (projectTerms.length && projectHits / projectTerms.length >= 0.5)) score += 6;
     else if (projectHits) score += 2;
     const named: RepoBriefIndexSymbol[] = [];
     for (const s of b.result.index?.symbols || []) {
       if (s.name.length < 4) continue;
       // Typed as written ("addOrderItems"), or spoken ("add order items"):
-      // speech-to-text never writes camelCase. A one-word name ("render")
-      // only counts when typed as an identifier, so plain speech can't hit it.
+      // speech-to-text never writes camelCase. A name of one or two words
+      // ("render", "setUp", "get_user") only counts when typed as an
+      // identifier: said aloud it is ordinary speech ("how do you set up JWT?").
       const phrase = spokenForm(s.name);
-      if (qIdents.has(s.name.toLowerCase()) || (phrase.trim().includes(' ') && qSpoken.includes(phrase))) named.push(s);
+      const said = phrase.trim().split(' ').length >= SPOKEN_SYMBOL_MIN_WORDS && qSpoken.includes(phrase);
+      if (qIdents.has(s.name.toLowerCase()) || said) named.push(s);
     }
     for (const f of b.result.index?.files || []) {
       const base = f.path.split('/').pop()!.replace(/\.[a-z0-9]+$/i, '');
       const phrase = spokenForm(base);
-      if (base.length >= 5 && (qIdents.has(base.toLowerCase()) || (phrase.trim().includes(' ') && qSpoken.includes(phrase)))) score += 3;
+      if (base.length >= 5 && (qIdents.has(base.toLowerCase()) || (phrase.trim().split(' ').length >= SPOKEN_SYMBOL_MIN_WORDS && qSpoken.includes(phrase)))) score += 3;
     }
     const unique = named.filter((s, i) => named.findIndex((o) => o.path === s.path && o.start === s.start) === i)
       .sort((x, y) => y.name.length - x.name.length || (y.score ?? 0) - (x.score ?? 0));
@@ -295,6 +380,8 @@ export function selectRepoContext(
     const { overview, units } = briefUnits(m.brief.result.brief);
     let left = perRepo;
     const lines: string[] = [header(m.brief)];
+    if (matchConfidence(m.score, carried) === 'possible') lines.push(POSSIBLE_MATCH_NOTE);
+    else if (!coversQuestion(rankText, m.brief, units)) lines.push(NOT_COVERED_NOTE);
     const ov = overview.length > OVERVIEW_CAP ? `${overview.slice(0, OVERVIEW_CAP).replace(/\s+\S*$/, '')} …` : overview;
     if (ov) { lines.push(`### Overview\n${ov}`); left -= ov.length; }
     const ranked = units
