@@ -155,13 +155,13 @@ const envText = fs.readFileSync(path.resolve(process.env.NATIVELY_ENV_FILE || pa
 // For paired direct-vs-gateway runs of the same questions.
 const PROVIDER = opt('provider', 'deepseek');
 const envKey = (name) => (envText.match(new RegExp(`^${name}=(.*)$`, 'm'))?.[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
-const keyName = opt('key-var', PROVIDER === 'agentrouter' ? 'AGENTROUTER_API_KEY' : 'DEEPSEEK_API_KEY');
+const keyName = opt('key-var', PROVIDER === 'agentrouter' ? 'AGENTROUTER_API_KEY' : PROVIDER === 'natively' ? 'NATIVELY_API_KEY' : 'DEEPSEEK_API_KEY');
 const dsKey = envKey(keyName);
 if (!dsKey) { console.error(`${keyName} not found in the env file (set NATIVELY_ENV_FILE).`); process.exit(2); }
 
 const c = await connectApp();
 if (!(await app.recorderEnabled(c))) { console.error('prompt recorder is off. Launch the instance with NATIVELY_E2E=1 NATIVELY_PROMPT_DEBUG=1 (npm run dev:agent).'); process.exit(2); }
-const profile = await app.setupProfile(c, PROVIDER === 'agentrouter' ? { agentrouterKey: dsKey } : { deepseekKey: dsKey });
+const profile = await app.setupProfile(c, PROVIDER === 'agentrouter' ? { agentrouterKey: dsKey } : PROVIDER === 'natively' ? { nativelyKey: dsKey } : { deepseekKey: dsKey });
 const gm = await app.builtinModeId(c, 'general').catch(() => 'mode_general_default');
 console.log('llm config:', JSON.stringify(profile.config));
 
@@ -185,7 +185,7 @@ const header = fs.existsSync(F.header) ? JSON.parse(fs.readFileSync(F.header, 'u
   started_at: new Date().toISOString(),
   finished_at: null,
   provider_model_config: profile.config,
-  llm_keys_in_profile: ['deepseek'],
+  llm_keys_in_profile: [PROVIDER],
   default_config_before_keys: profile.before,
   pro_enabled_via_e2e_hook: profile.pro,
   os: `${os.type()} ${os.release()} ${os.arch()}`,
