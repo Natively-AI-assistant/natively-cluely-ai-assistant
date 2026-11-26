@@ -2645,6 +2645,12 @@ export class ModeHybridRetriever {
         // loaded from SQLite below; the per-question cost is one query embed
         // + a cosine loop, instead of the old re-embed-every-chunk JIT path
         // that burned the latency budget on every turn.
+        // Sub-stage timings for the E2E stage trace (same switches as markH4HybridStage in retrieve()).
+        const h4 = process.env.NATIVELY_E2E === '1' && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+        const h4t0 = Date.now();
+        const h4mark = (stage: string, details: Record<string, unknown> = {}) => {
+            if (h4) console.log('[TRACE:H4-HYBRID-INNER]', JSON.stringify({ stage, atMs: Date.now() - h4t0, ...details }));
+        };
         let queryEmbedding: number[];
         try {
             queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(
@@ -2659,6 +2665,7 @@ export class ModeHybridRetriever {
             throw new Error('Query embedding failed: ' + error + healthNote);
         }
 
+        h4mark('query_embedded');
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
         const fileIds = [...new Set(candidates.map(c => c.sourceId))];
         // Space identity gate: vectors are only comparable within the same
@@ -2703,6 +2710,7 @@ export class ModeHybridRetriever {
         // ephemerally for THIS query so semantic matching never regresses.
         // Once upload-time indexing lands (kicked below), this list is empty
         // and the hot path is one query embed + a cosine loop.
+        h4mark('vectors_loaded', { persisted: persisted.size });
         const missing = candidates.filter(c => !persisted.has(`${c.sourceId}:${c.chunkIndex}`));
         diagLog('HYBRID performHybrid vectors', { activeSpace, totalCandidates: candidates.length, persistedHits: persisted.size, missingCount: missing.length });
         const ephemeral = new Map<string, number[]>();
@@ -2796,7 +2804,9 @@ export class ModeHybridRetriever {
         // embed failure) — their score is lexical-only and must be judged on
         // the lexical scale (F23), not against the combined floor.
         const vectorless = new Set<string>();
+        h4mark('ephemeral_done');
         const lexical = this.lexicalScores(candidates, queryWords);
+        h4mark('lexical_scored');
         for (let ci = 0; ci < candidates.length; ci++) {
             const candidate = candidates[ci];
             const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
@@ -2807,6 +2817,7 @@ export class ModeHybridRetriever {
             const vectorScore = vec ? this.computeVectorScore(queryEmbedding, vec) : 0;
             scored.push({ ...candidate, ftsScore, vectorScore, ...(anchorScore > 0 ? { anchorScore } : {}) });
         }
+        h4mark('cosine_scored');
         if (vectorStats) {
             vectorStats.scored = candidates.length;
             vectorStats.withVector = candidates.length - vectorless.size;
