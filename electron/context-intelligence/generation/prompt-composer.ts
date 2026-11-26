@@ -1368,7 +1368,8 @@ export const PERSONAL_LIFE_NOTICE = '(This asks about the user\'s own life — s
 export const TYPED_COMMITMENT_NOTICE = '(The user is asking you what to say about their own preference, plan, number, status or reason, such as pay, '
   + 'notice, start date, relocation, work authorisation or other interviews. Unless something above states their own answer, do not state one for them: '
   + 'give the line to say for each likely case as one or two short options ("If you need sponsorship: …"), or one line that stays true either way. '
-  + 'Never invent a number, a status or a decision, and do not dwell on what their files do not say.)';
+  + 'Never invent a number, a status or a decision, and do not dwell on what their files do not say. When something above does state '
+  + 'their answer, give that answer as written, with its numbers, dates, limits and exceptions.)';
 
 export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean, ownWords = false): string {
   if (!heard) {
@@ -1391,7 +1392,12 @@ export function personalCommitmentNotice(question: string, modeId: string | unde
     return '(This asks for the user\'s own preference, commitment or reason. Unless something above states the user\'s own answer, '
       + 'do not decide it for them: no yes or no, no reason, no number of their own. Answer so it stays true either way, open or '
       + 'conditional, naming what they would weigh or asking the next practical question. What the other side stated, such as a '
-      + 'band, a schedule or relocation support, may be acknowledged.)';
+      + 'band, a schedule or relocation support, may be acknowledged.'
+      // Autopilot 2026-11-27, judged with a prep-notes reference file loaded: saved answers ("not relocating; Denver only,
+      // not before June 2027", "hybrid at most 2 days, 35-minute commute") came back softened into the open shape above
+      // ("I'd want to understand what it required before I said either way"), contradicting the user's own notes.
+      + ' When something above does state the user\'s own answer (a saved answer or a note they wrote), say that answer as written, with '
+      + 'its numbers, dates, limits and exceptions, plainly: do not reopen or soften it. A value they marked private stays unsaid.)';
   }
   if (PERSONAL_EXPERIENCE_RE.test(q)) {
     // ownWords: About you, the mode's notes or an always-on skill are above
