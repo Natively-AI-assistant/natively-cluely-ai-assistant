@@ -350,3 +350,63 @@ test('a throwing release is logged and does not break the check', () => {
   assert.equal(guard.noteUserReveal(), false);
   assert.ok(logs.some((m) => m.includes('release failed')));
 });
+
+// The notice after the mirror ends: only the user sees it then.
+function noticeRig({ heldCount = 0 } = {}) {
+  const state = { undetectable: true, mirror: MIRRORED, visible: true, heldCount, notices: 0 };
+  const guard = createPresentationMirrorGuard({
+    readMirrorState: () => state.mirror,
+    isUndetectable: () => state.undetectable,
+    anyWindowVisible: () => state.visible,
+    isBusy: () => false,
+    hideAll: () => { state.visible = false; return 'session'; },
+    restore: () => { state.visible = true; },
+    releaseHeld: () => { const n = state.heldCount; state.heldCount = 0; return n; },
+    onShownAfterMirror: () => { state.notices += 1; },
+    setInterval: () => 1,
+    clearInterval: () => {},
+  });
+  return { guard, state };
+}
+
+test('notice: told once when the mirror ends and the hidden windows come back', () => {
+  const { guard, state } = noticeRig();
+  guard.sync(true);
+  assert.equal(state.notices, 0, 'never during the mirror');
+  state.mirror = SINGLE;
+  guard.check();
+  guard.check();
+  assert.equal(state.notices, 1);
+});
+
+test('notice: also when only held windows (never shown) come back', () => {
+  const { guard, state } = noticeRig({ heldCount: 1 });
+  state.visible = false;
+  guard.sync(true);
+  state.mirror = SINGLE;
+  guard.check();
+  assert.equal(state.notices, 1);
+});
+
+test('notice: not after Cmd/Ctrl+B (the user saw it), not when nothing was hidden', () => {
+  const a = noticeRig();
+  a.guard.sync(true);
+  a.guard.noteUserReveal();
+  a.state.mirror = SINGLE;
+  a.guard.check();
+  assert.equal(a.state.notices, 0);
+  const b = noticeRig();
+  b.state.visible = false;
+  b.guard.sync(true);
+  b.state.mirror = SINGLE;
+  b.guard.check();
+  assert.equal(b.state.notices, 0);
+});
+
+test('notice: not when Undetectable is turned off mid-mirror (the windows return onto the mirror)', () => {
+  const { guard, state } = noticeRig();
+  guard.sync(true);
+  state.undetectable = false;
+  guard.sync(false);
+  assert.equal(state.notices, 0);
+});

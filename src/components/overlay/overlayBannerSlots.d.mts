@@ -12,6 +12,7 @@ export type OverlayBannerId =
   | 'last-time'
   | 'capture-fallback'
   | 'refusal-retry'
+  | 'mirror-hidden'
   | 'stealth-permission'
   | 'hotkey-conflict'
   | 'audio-advisory';

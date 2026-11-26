@@ -55,6 +55,12 @@ export interface PresentationMirrorGuardDeps<Token> {
    * hid them (the mirror ended first, or the user revealed). Returns how many.
    */
   releaseHeld?: () => number;
+  /**
+   * The mirror ended and windows the guard kept off it came back (not after
+   * the user revealed them, and not because Undetectable was turned off).
+   * Main tells the restored window, which shows a notice only the user sees.
+   */
+  onShownAfterMirror?: () => void;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
   log?: (message: string) => void;
@@ -84,8 +90,8 @@ export function createPresentationMirrorGuard<Token>(deps: PresentationMirrorGua
     }
   };
 
-  const restoreHidden = (): void => {
-    if (!restoreToken) return;
+  const restoreHidden = (): boolean => {
+    if (!restoreToken) return false;
     const { token } = restoreToken;
     restoreToken = null;
     restoring = true; // the restore's own shows must not be held
@@ -96,6 +102,7 @@ export function createPresentationMirrorGuard<Token>(deps: PresentationMirrorGua
     } finally {
       restoring = false;
     }
+    return true;
   };
 
   const releaseHeld = (): number => {
@@ -108,13 +115,21 @@ export function createPresentationMirrorGuard<Token>(deps: PresentationMirrorGua
   };
 
   const check = (): void => {
-    const state = deps.isUndetectable() ? readMirrored() : null;
+    const undetectable = deps.isUndetectable();
+    const state = undetectable ? readMirrored() : null;
     if (!state?.mirrored) {
       if (mirrored) deps.log?.('[PresentationMirror] mirroring ended');
       mirrored = false;
       userRevealed = false;
-      restoreHidden();
-      releaseHeld();
+      const restored = restoreHidden();
+      const released = releaseHeld();
+      if ((restored || released > 0) && undetectable) {
+        try {
+          deps.onShownAfterMirror?.();
+        } catch (e: any) {
+          deps.log?.(`[PresentationMirror] notice failed: ${e?.message ?? e}`);
+        }
+      }
       return;
     }
     if (!mirrored) {
@@ -168,8 +183,8 @@ export function createPresentationMirrorGuard<Token>(deps: PresentationMirrorGua
       const state = deps.isUndetectable() ? readMirrored() : null;
       if (state?.mirrored) {
         mirrored = true;
+        if (!userRevealed) deps.log?.('[PresentationMirror] shown by the user while mirrored');
         userRevealed = true;
-        deps.log?.('[PresentationMirror] shown by the user while mirrored');
       }
       // Also when the mirror ended less than a poll ago: the restore is due.
       const hadHidden = restoreToken !== null;

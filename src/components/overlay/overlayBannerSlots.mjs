@@ -29,6 +29,7 @@
 //   last-time          what last time's notes left open
 //   capture-fallback   the page capture the user just asked for fell back
 //   refusal-retry      the screenshot answer was retried without the border
+//   mirror-hidden      Natively hid while the screen was mirrored (#630)
 //   stealth-permission stealth typing cannot start (Accessibility / keyboard hook)
 //   hotkey-conflict    the stealth typing hotkey is taken
 //   audio-advisory     audio advice, e.g. a Bluetooth mic in call mode
@@ -52,6 +53,7 @@ export const OVERLAY_BANNER_PRIORITY = Object.freeze([
   'last-time',
   'capture-fallback',
   'refusal-retry',
+  'mirror-hidden',
   'stealth-permission',
   'hotkey-conflict',
   'audio-advisory',

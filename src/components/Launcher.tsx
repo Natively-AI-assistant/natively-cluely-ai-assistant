@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
-import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, MonitorOff, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
 import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
 import { NativelyWordmark } from './NativelyWordmark';
 import mainui from "../UI_comp/mainui.png";
@@ -119,7 +119,18 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     const [eventsLoaded, setEventsLoaded] = useState(false);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [showNotification, setShowNotification] = useState(false);
+    // The corner toast: the calendar refresh, or #630's "hidden while your
+    // screen was mirrored", told once the mirror ends.
+    const [notification, setNotification] = useState<'refreshed' | 'mirror' | null>(null);
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const off = window.electronAPI?.onShownAfterMirror?.(() => {
+            setNotification('mirror');
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => setNotification((n) => (n === 'mirror' ? null : n)), 8000);
+        });
+        return () => { off?.(); if (timer) clearTimeout(timer); };
+    }, []);
 
     // Global search state (for AI chat overlay)
     const [isGlobalChatOpen, setIsGlobalChatOpen] = useState(false);
@@ -152,12 +163,12 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
         analytics.trackCommandExecuted('refresh_calendar');
         try {
             if (window.electronAPI && window.electronAPI.calendarRefresh) {
-                setShowNotification(true);
+                setNotification('refreshed');
                 await window.electronAPI.calendarRefresh();
                 fetchEvents();
                 fetchMeetings();
                 setTimeout(() => {
-                    setShowNotification(false);
+                    setNotification((n) => (n === 'refreshed' ? null : n));
                 }, 3000);
             } else {
                 console.warn("electronAPI.calendarRefresh not found");
@@ -1339,7 +1350,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
 
             {/* Notification Toast - Liquid Glass (macOS 26 Tahoe Concept) */}
             <AnimatePresence>
-                {showNotification && (
+                {notification && (
                     <motion.div
                         key="refresh-toast"
                         // The corner notices' slide (genieMotion.mjs SLIDE, where the
@@ -1362,13 +1373,19 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                             <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-md" />
                             {/* Light: a darker blue and no glow, as ProviderChangeNotice's ORB does;
                                 the dark theme's pale blue-300 vanished into the pale disc. */}
-                            <RefreshCw size={15} className={`relative animate-[spin_2s_linear_infinite] ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />
+                            {notification === 'mirror'
+                                ? <MonitorOff size={15} className={`relative ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />
+                                : <RefreshCw size={15} className={`relative animate-[spin_2s_linear_infinite] ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />}
                         </div>
 
                         {/* Text Content */}
                         <div className="flex flex-col gap-0.5">
-                            <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">{t('Refreshed')}</span>
-                            <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">{t('Synced with calendar')}</span>
+                            <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">
+                                {notification === 'mirror' ? t('Hidden while your screen was mirrored') : t('Refreshed')}
+                            </span>
+                            <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">
+                                {notification === 'mirror' ? t('Extend your desktop to keep Natively on your screen.') : t('Synced with calendar')}
+                            </span>
                         </div>
 
                         {/* Specular Highlight Overlay */}

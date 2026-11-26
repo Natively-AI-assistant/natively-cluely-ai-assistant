@@ -9550,6 +9550,18 @@ export class AppState {
     return guarded.some((w) => !!w && (w as unknown) === win);
   }
 
+  /**
+   * The mirror ended and the windows the guard hid are back (#630). Tell the
+   * main window, which shows a notice. Only now: during the mirror any notice
+   * would be on the projector too.
+   */
+  public notifyShownAfterMirror(): void {
+    const win = this.windowHelper.getCurrentWindowMode() === 'overlay'
+      ? this.windowHelper.getOverlayWindow()
+      : this.windowHelper.getLauncherWindow();
+    if (win && !win.isDestroyed()) win.webContents.send('stealth:shown-after-mirror');
+  }
+
   public isScreenshotCaptureInProgress(): boolean {
     return this.screenshotCaptureInProgress;
   }
@@ -12289,6 +12301,7 @@ if (process.env.THINKING_MATRIX === '1') {
       restore: (session) => appState.restoreWindowsAfterMirroring(session),
       merge: (earlier, later) => appState.mergeMirroringHides(earlier, later),
       releaseHeld: () => mirrorShowGate.releaseAll(),
+      onShownAfterMirror: () => appState.notifyShownAfterMirror(),
       // Never what keeps the process alive at quit.
       setInterval: (fn, ms) => {
         const handle = setInterval(fn, ms);
