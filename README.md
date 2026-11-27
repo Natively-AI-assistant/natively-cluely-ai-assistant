@@ -193,7 +193,7 @@ Other tools hide a window. Natively hides the whole app, at every layer a screen
 - **Nothing it opens leaks.** Tooltips, dialogs, dropdowns, file pickers and notifications are separate windows, and an overlay that forgets them shows up in the share. In Undetectable mode Natively keeps every one of them out.
 - **No Dock icon, no taskbar button, no tray icon** while Undetectable mode is on.
 - **Process Disguise on macOS and Windows.** Have the app present itself as Terminal, System Settings or Activity Monitor in the process list, the Dock and the taskbar.
-- **Type without losing focus (Windows).** Stealth typing sends your keys to the overlay while your call keeps focus, and Protect Natively shortcuts stops a shortcut from also typing into the app underneath.
+- **Type without losing focus (Windows).** Stealth typing sends your keys to the overlay while your call keeps focus, and Protect Natively shortcuts stops a shortcut from also typing into the app underneath. While it is active, the foreground page does not receive those keydown/keyup/input events — useful for staying in the call, not a promise of invisibility to an instrumented site or proctoring tool.
 - **Quiet on the network.** Third-party analytics and crash reporting switch off for as long as Undetectable mode is on.
 
 Interview Coder built its name on process-level hiding. Natively disguises its process on both macOS and Windows, adds everything above, covers the whole interview instead of only the coding round, and is free for personal use.
@@ -1262,6 +1262,10 @@ Cluely is a $20/month cloud-based tool that stores all data on their servers. In
 #### Is stealth mode actually undetectable?
 
 In the meeting apps we test, yes. Natively hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet. This is best-effort, not guaranteed: on macOS 15.4+ Apple can let modern capture tools see it anyway, and a phone camera always can.
+
+#### Does Stealth Typing hide that I am typing?
+
+No. On Windows, Stealth Typing installs a low-level keyboard hook so keys go to Natively's overlay while the meeting app (or browser) keeps focus. The foreground page stays focused but does **not** receive `keydown`, `keyup`, `beforeinput`, or `input` for those characters. That is intentional diversion, not invisibility: a page that asks you to type, or privileged proctoring software, can still notice a focused page with a missing keyboard event stream. Treat Stealth Typing as a focus helper, not as a promise that typing cannot be observed.
 
 #### Zoom shows my overlay in screen share — how do I fix it?
 

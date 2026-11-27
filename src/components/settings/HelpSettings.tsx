@@ -770,6 +770,7 @@ const HelpPane: React.FC<{
                     <p>
                         {keys('focusInput')} types into the overlay's ask box while your meeting app keeps focus.
                         {facts.stealthTypingNeedsAccessibility && ' macOS asks for Accessibility the first time.'}
+                        {' '}On Windows, those keys are diverted to Natively and the focused page does not receive them — that is expected, not a guarantee that an instrumented site or proctoring tool cannot notice the missing keyboard events.
                     </p>
                     <HelpDefinitions
                         items={[
