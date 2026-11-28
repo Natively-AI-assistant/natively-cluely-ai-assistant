@@ -85,3 +85,15 @@ test('the composer carries the rules on heard turns only', () => {
   assert.ok(c(true).sections.includes('answering_rules'));
   assert.ok(!c(false).sections.includes('answering_rules'));
 });
+
+// Review of PR #825 (2026-11-28): the heading parse backtracked cubically on a long run of spaces (4 s for 3,000).
+test('a heading line with a long run of spaces parses in linear time', () => {
+  const t0 = Date.now();
+  const r = extractAnsweringRules(`# Interview tips\n- Lead with the number.\n# a${' '.repeat(20000)}b\nnot a rule\n`);
+  assert.ok(Date.now() - t0 < 200, `${Date.now() - t0} ms`);
+  assert.equal(r, 'Interview tips:\n- Lead with the number.');
+});
+test('closing hashes are trimmed, a hash inside the heading is kept', () => {
+  assert.equal(extractAnsweringRules('## Interview tips ##\n- Short.'), 'Interview tips:\n- Short.');
+  assert.equal(extractAnsweringRules('## Interview tips for C#\n- Short.'), 'Interview tips for C#:\n- Short.');
+});

@@ -39,6 +39,9 @@ export interface ComposeInput {
   /** The chosen question is the USER's own spoken line (what-to-answer picked
    *  it because the user asked after the other party). Never set with heardQuestion. */
   questionSpokenByUser?: boolean;
+  /** The question was TYPED by the user into a chat box (the 'manual-chat' surface). Not set on Assist, Code hint,
+   *  Brainstorm, Recap or follow-ups, whose question comes from the transcript: those are neither heard nor typed. */
+  typedByUser?: boolean;
   /** The answer is READ, not said: the launcher's chat (2026-09-29). Drops the
    *  spoken-delivery rules that contradict the chat layout. Every live surface
    *  (what-to-answer, the overlay's typed box) leaves it unset. */
@@ -1383,9 +1386,20 @@ export const TYPED_COMMITMENT_NOTICE = '(The user is asking you what to say abou
   + 'the other side said (authorization needed, no sponsorship, a pay band) is never the user\'s own status or answer. When something above does state '
   + 'their answer, give that answer as written, with its numbers, dates, limits and exceptions.)';
 
-export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean, ownWords = false): string {
+// Review of PR #825 (2026-11-28): in Technical Interview the commitment patterns also match technical wording ("hybrid
+// search", "remote procedure call", "the current base case", "traveling salesman"). There the notice needs the question
+// to be about the user: their own words when typed ("my", "I"), the other side's "you"/"your" when heard.
+const ABOUT_ME_RE = /\b(?:i|me|my|mine|myself|i'm|i'd|i've|i'll)\b/i;
+const ABOUT_YOU_RE = /\b(?:you|your|yours|yourself|you're|you'd|you've|you'll)\b/i;
+
+export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean, ownWords = false, typedByUser = true): string {
   if (!heard) {
+    // Only a question the user typed: Assist, Code hint and the other transcript surfaces are not heard either, and
+    // the typed notice ("tell them directly, a value they keep private included") must never reach a line for the
+    // other side.
+    if (!typedByUser) return '';
     const tq = String(question ?? '');
+    if (modeId === 'technical-interview' && !ABOUT_ME_RE.test(tq)) return '';
     return modeId && OWN_LIFE_MODES.has(modeId) && (PERSONAL_PREFERENCE_RE.test(tq) || JOB_SEARCH_STATUS_RE.test(tq)) ? TYPED_COMMITMENT_NOTICE : '';
   }
   const q = String(question ?? '');
@@ -1400,7 +1414,8 @@ export function personalCommitmentNotice(question: string, modeId: string | unde
   }
   const noCommitment = Boolean(modeId && NO_COMMITMENT_MODES.has(modeId));
   if (!noCommitment && modeId && PERSONAL_LIFE_MODES.has(modeId) && PERSONAL_LIFE_RE.test(q)) return PERSONAL_LIFE_NOTICE;
-  if (!noCommitment && (PERSONAL_PREFERENCE_RE.test(q) || (Boolean(modeId) && OWN_LIFE_MODES.has(modeId as string) && JOB_SEARCH_STATUS_RE.test(q)))) {
+  if (!noCommitment && (PERSONAL_PREFERENCE_RE.test(q) || (Boolean(modeId) && OWN_LIFE_MODES.has(modeId as string) && JOB_SEARCH_STATUS_RE.test(q)
+    && (modeId !== 'technical-interview' || ABOUT_YOU_RE.test(q))))) {
     return '(This asks for the user\'s own preference, commitment or reason. Unless something above states the user\'s own answer, '
       + 'do not decide it for them: no yes or no, no reason, no number of their own. Answer so it stays true either way, open or '
       + 'conditional, naming what they would weigh or asking the next practical question. What the other side stated, such as a '
@@ -1803,7 +1818,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
   // The user's own words about themselves are in this prompt (About you, mode notes, always-on skills).
   const hasOwnWords = Boolean(input.userBio?.trim() || input.modeNotes?.trim() || input.standingSkills?.trim());
-  const commitmentNotice = personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion), hasOwnWords);
+  const commitmentNotice = personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion), hasOwnWords, input.typedByUser === true);
 
   // An exhaustive request carries a tripled evidence cap on its plan; the
   // token budget must grow with it or the extra chunks are dropped here.

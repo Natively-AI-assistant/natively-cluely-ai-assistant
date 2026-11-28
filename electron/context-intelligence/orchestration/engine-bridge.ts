@@ -667,6 +667,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
       heardQuestion: input.surface === 'what-to-answer' && input.questionSpeaker !== 'user',
       questionSpokenByUser: input.surface === 'what-to-answer' && input.questionSpeaker === 'user',
+      typedByUser: input.surface === 'manual-chat',
       readingSurface: input.readingSurface === true,
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered

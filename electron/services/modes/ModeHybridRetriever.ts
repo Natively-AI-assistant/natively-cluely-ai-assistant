@@ -1137,6 +1137,8 @@ export class ModeHybridRetriever {
             for (const fileId of fileIds) {
                 const stamp = this.persistedVectorStamp(fileId);
                 let entry = stamp !== null ? this.persistedVecCache.get(fileId) : undefined;
+                // Least recently used: a hit moves to the end, so two files that both fit are not evicted in turn.
+                if (entry && entry.space === space && entry.stamp === stamp) { this.persistedVecCache.delete(fileId); this.persistedVecCache.set(fileId, entry); }
                 if (!entry || entry.space !== space || entry.stamp !== stamp) {
                     const rows = this.db.prepare(`
                         SELECT chunk_index, embedding FROM mode_reference_chunks
@@ -1292,7 +1294,8 @@ export class ModeHybridRetriever {
         // identity check above never held from one question to the next and a ~500k-token file rebuilt its idf table
         // (~150 ms) on every question. A FULL pool built from the same per-file chunk arrays (chunkCache, stable while
         // the content is unchanged), in the same order, has the same texts at the same positions: reuse its stats.
-        const meta = this.fullPoolMeta.get(pool);
+        // Optional: a caller that borrows this method with its own `this` (LexicalFloorScaleF23) has no pool meta.
+        const meta = this.fullPoolMeta?.get(pool);
         const prev = this.lexicalStatsByChunks;
         if (meta && prev && prev.ids.length === meta.ids.length
             && prev.ids.every((id, i) => id === meta.ids[i] && prev.arrays[i] === meta.arrays[i])) {

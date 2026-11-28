@@ -152,3 +152,33 @@ describe('commitment notices: JD requirements are not the user\'s status; job mo
     });
   }
 });
+
+// Review of PR #825 (2026-11-28): the typed notice reached transcript surfaces (Assist, Code hint), and in Technical
+// Interview the commitment patterns matched technical wording. String work only: same on macOS and Windows.
+describe('the typed notice is for questions the user typed, about themselves', async () => {
+  const { personalCommitmentNotice, TYPED_COMMITMENT_NOTICE } = await load('generation/prompt-composer.js');
+  const own = /asks for the user's own preference, commitment or reason/;
+  test('not on a surface that is neither heard nor typed (Assist, Code hint, Recap)', () => {
+    for (const mode of ['looking-for-work', 'technical-interview']) {
+      assert.equal(personalCommitmentNotice('what are your salary expectations?', mode, false, false, false), '', mode);
+      assert.equal(personalCommitmentNotice('she asked current comp + notice, neither on my resume. what do I say', mode, false, false, false), '', mode);
+    }
+  });
+  test('typed technical questions in Technical Interview get no notice', () => {
+    for (const q of ['Explain hybrid search versus pure vector search', 'How does a remote procedure call differ from REST?',
+      'traveling salesman with bitmask DP', 'design a hybrid cloud failover, bullets']) {
+      assert.equal(personalCommitmentNotice(q, 'technical-interview', false), '', q);
+    }
+    assert.equal(personalCommitmentNotice('what notice period did I put in my notes?', 'technical-interview', false), TYPED_COMMITMENT_NOTICE);
+  });
+  test('heard: a technical "current base" is not a pay question; "your current base" is', () => {
+    assert.equal(personalCommitmentNotice('What is the current base case of this recursion?', 'technical-interview', true), '');
+    assert.match(personalCommitmentNotice("What's your current base right now?", 'technical-interview', true), own);
+    assert.match(personalCommitmentNotice('What is the current base case of this recursion?', 'looking-for-work', true), own, 'Looking for work keeps the judged gate');
+  });
+  test('the bridge marks only manual chat as typed', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/context-intelligence/orchestration/engine-bridge.ts'), 'utf8');
+    assert.match(src, /typedByUser: input\.surface === 'manual-chat',/);
+  });
+});

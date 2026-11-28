@@ -30,15 +30,28 @@ const INHERITED_SECTION_MAX_CHARS = 1200;
 
 interface Section { level: number; heading: string; body: string[] }
 
+/** A heading's text without its closing hashes ("## Tips ##"), by plain string work: no regex can backtrack here. */
+function headingText(raw: string): string {
+  let t = raw.trimEnd();
+  let end = t.length;
+  while (end > 0 && t[end - 1] === '#') end--;
+  // Closing hashes count only after whitespace ("Tips for C#" keeps its hash).
+  if (end < t.length && (end === 0 || t[end - 1] === ' ' || t[end - 1] === '\t')) t = t.slice(0, end).trimEnd();
+  return t;
+}
+
 function sectionsOf(content: string): Section[] {
   const out: Section[] = [];
   let cur: Section | null = null;
   let inFence = false;
   for (const line of String(content ?? '').replace(/\r\n?/g, '\n').split('\n')) {
     if (/^\s*```/.test(line)) inFence = !inFence;
-    const m = !inFence ? /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line) : null;
-    if (m) {
-      cur = { level: m[1].length, heading: m[2].trim(), body: [] };
+    // Linear: the old /^(#{1,6})\s+(.+?)\s*#*\s*$/ backtracked cubically on a heading line with a long run of spaces
+    // (a padded table row: 4 s for 3,000 spaces, review of PR #825).
+    const m = !inFence ? /^(#{1,6})[ \t]+(\S.*)$/.exec(line) : null;
+    const heading = m ? headingText(m[2]) : '';
+    if (m && heading) {
+      cur = { level: m[1].length, heading, body: [] };
       out.push(cur);
     } else if (cur) cur.body.push(line);
   }
