@@ -22,6 +22,7 @@
 import { splitGistLine } from './promptSystemV2';
 import { assessAnswerCoverage } from './answerCoverage';
 import { raceStreamWithDeadline, type StreamObserver } from './liveDeadlines';
+import { isCommitmentQuestion } from './commitmentQuestion';
 
 export type ClaimVerifierKind = 'personal' | 'product' | 'life' | 'meeting';
 
@@ -78,8 +79,18 @@ export function claimVerifierKind(input: { modeId: string | null | undefined; qu
   // engineering lead") into that form. Live on the Natively API, the prompt alone left "I report to the engineering
   // lead" in 8 to 13 of 18 answers. With a document loaded both modes keep the 2026-10-15 decision above.
   const spokenWithoutDocuments = input.noDocuments === true && input.surface !== 'typed';
+  // AND ON A HEARD COMMITMENT QUESTION (autopilot 2026-11-27, EXPERIMENT, not an owner decision yet): salary,
+  // relocation, notice, start date, job-search status, reasons for leaving. Baseline with a résumé and JD loaded
+  // (Natively API, deepseek-flash): "I'd be moving for this role", "I'd be moving from Portland to Denver" and an
+  // invented interview status came back despite the commitment notice next to the question.
+  // OFF BY DEFAULT (opt in with NATIVELY_VERIFY_COMMITMENT=1), owner decision pending: judged, it fixed 4 of 6 such
+  // answers without files, but with a 500k prep file it cut a correct saved answer ("Denver only, not before June
+  // 2027") from 50 words to 25 and dropped the fact, and every gated answer pays ~1.4 s.
+  // Looking for work only: in Technical Interview "remote procedure call", "hybrid search" and "compensating
+  // transaction" are technical words the pattern would open the gate for.
+  const spokenCommitment = mode === 'looking-for-work' && input.surface === 'spoken' && process.env.NATIVELY_VERIFY_COMMITMENT === '1' && isCommitmentQuestion(q);
   if (mode === 'looking-for-work') {
-    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1' && !spokenWithoutDocuments) return null;
+    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1' && !spokenWithoutDocuments && !spokenCommitment) return null;
     return 'personal';
   }
   if (mode === 'technical-interview') {

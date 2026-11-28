@@ -163,6 +163,9 @@ const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATC
  */
 export const QUERY_EPHEMERAL_EMBED_MAX = Number(process.env.NATIVELY_QUERY_EPHEMERAL_EMBED_MAX) || 24;
 
+/** Persisted chunk vectors kept in memory across questions (~8 KB each at 2048 dims: 10,000 ≈ 80 MB). */
+export const PERSISTED_VECTOR_CACHE_MAX = 10_000;
+
 /**
  * F22 — the LOCAL ONNX embedder needs a much smaller indexing batch.
  *
@@ -550,6 +553,7 @@ export class ModeHybridRetriever {
      * Update the index state for a file after embedding its chunks
      */
     private updateIndexState(fileId: string, contentHash: string, chunkCount: number, status: ModeReferenceIndexStatus = 'ready', embeddingSpace: string | null = null, embeddedChunkCount: number = 0): void {
+        this.dropPersistedVectors(fileId);
         try {
             this.db.prepare(`
                 INSERT OR REPLACE INTO mode_reference_index_state (file_id, file_hash, indexed_at, chunk_count, status, embedding_space, embedded_chunk_count)
@@ -564,6 +568,7 @@ export class ModeHybridRetriever {
      * Remove index state for a deleted file
      */
     private removeIndexState(fileId: string): void {
+        this.dropPersistedVectors(fileId);
         try {
             this.db.prepare('DELETE FROM mode_reference_index_state WHERE file_id = ?').run(fileId);
         } catch (e) {
@@ -829,7 +834,7 @@ export class ModeHybridRetriever {
         // file that is still indexing.
         const previous = this.getIndexState(file.id);
         if (previous && previous.fileHash !== contentHash) {
-            try { this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(file.id); this.chunkCache.delete(file.id); }
+            try { this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(file.id); this.chunkCache.delete(file.id); this.dropPersistedVectors(file.id); }
             catch (e) { console.warn('[ModeHybridRetriever] could not clear a stale index before re-indexing:', e); }
         }
         // Pick up where a stopped run left off. A rate limit mid-file keeps the
@@ -1014,6 +1019,7 @@ export class ModeHybridRetriever {
      * The caller must not record success it did not get.
      */
     private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): boolean {
+        this.dropPersistedVectors(fileId);
         try {
             const del = this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?');
             const ins = this.db.prepare(`
@@ -1088,6 +1094,7 @@ export class ModeHybridRetriever {
     }
 
     public removeFileIndex(fileId: string): void {
+        this.dropPersistedVectors(fileId);
         try {
             this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(fileId);
         } catch (e) {
@@ -1103,19 +1110,60 @@ export class ModeHybridRetriever {
      * — a space mismatch is treated as un-indexed (degrade to lexical), never
      * compared cross-space.
      */
-    private loadPersistedEmbeddings(fileIds: string[], space: string): Map<string, number[]> {
-        const out = new Map<string, number[]>();
+    /**
+     * Persisted vectors held in memory between questions (autopilot 2026-11-27). Reading every chunk vector back from
+     * SQLite and copying it into a JS array on EVERY question made retrieval over a ~500k-token reference file cost
+     * ~0.7 s before the model call (dispatch p50 739 ms against 16 ms for a 10k file, 60 questions each). Keyed by file
+     * id and stamped with that file's index-state row; every write to either table drops the entry (see
+     * dropPersistedVectors), and a stamp mismatch re-reads, so a stale vector is never served. Bounded by
+     * PERSISTED_VECTOR_CACHE_MAX vectors, oldest file first. Pure JS memory: same on macOS and Windows.
+     */
+    private persistedVecCache = new Map<string, { space: string; stamp: string; vecs: Map<number, Float32Array> }>();
+
+    private dropPersistedVectors(fileId?: string): void {
+        if (fileId === undefined) this.persistedVecCache.clear();
+        else this.persistedVecCache.delete(fileId);
+    }
+
+    private persistedVectorStamp(fileId: string): string | null {
+        const st = this.getIndexState(fileId);
+        return st ? `${st.fileHash}|${st.indexedAt}|${st.chunkCount}|${st.embeddedChunkCount}|${st.status}|${st.embeddingSpace ?? ''}` : null;
+    }
+
+    private loadPersistedEmbeddings(fileIds: string[], space: string): Map<string, ArrayLike<number>> {
+        const out = new Map<string, ArrayLike<number>>();
         if (fileIds.length === 0) return out;
         try {
-            const placeholders = fileIds.map(() => '?').join(',');
-            const rows = this.db.prepare(`
-                SELECT file_id, chunk_index, embedding FROM mode_reference_chunks
-                WHERE file_id IN (${placeholders}) AND embedding IS NOT NULL AND embedding_space = ?
-            `).all(...fileIds, space) as any[];
-            for (const row of rows) {
-                const buf: Buffer = row.embedding;
-                const vec = Array.from(new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
-                out.set(`${row.file_id}:${row.chunk_index}`, vec);
+            for (const fileId of fileIds) {
+                const stamp = this.persistedVectorStamp(fileId);
+                let entry = stamp !== null ? this.persistedVecCache.get(fileId) : undefined;
+                // Least recently used: a hit moves to the end, so two files that both fit are not evicted in turn.
+                if (entry && entry.space === space && entry.stamp === stamp) { this.persistedVecCache.delete(fileId); this.persistedVecCache.set(fileId, entry); }
+                if (!entry || entry.space !== space || entry.stamp !== stamp) {
+                    const rows = this.db.prepare(`
+                        SELECT chunk_index, embedding FROM mode_reference_chunks
+                        WHERE file_id = ? AND embedding IS NOT NULL AND embedding_space = ?
+                    `).all(fileId, space) as any[];
+                    const vecs = new Map<number, Float32Array>();
+                    for (const row of rows) {
+                        const buf: Buffer = row.embedding;
+                        // A copy, not a view: the row's Buffer is not ours to keep.
+                        vecs.set(row.chunk_index, new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)));
+                    }
+                    entry = { space, stamp: stamp ?? '', vecs };
+                    if (stamp !== null) {
+                        this.persistedVecCache.delete(fileId);
+                        this.persistedVecCache.set(fileId, entry);
+                        let total = 0;
+                        for (const e of this.persistedVecCache.values()) total += e.vecs.size;
+                        for (const [id, e] of this.persistedVecCache) {
+                            if (total <= PERSISTED_VECTOR_CACHE_MAX || id === fileId) break;
+                            total -= e.vecs.size;
+                            this.persistedVecCache.delete(id);
+                        }
+                    }
+                }
+                for (const [i, v] of entry.vecs) out.set(`${fileId}:${i}`, v);
             }
         } catch (e) {
             console.warn('[ModeHybridRetriever] loadPersistedEmbeddings failed:', e);
@@ -1128,6 +1176,8 @@ export class ModeHybridRetriever {
      */
     private getModeFileChunks(files: ModeReferenceFile[]): ChunkCandidate[] {
         const candidates: ChunkCandidate[] = [];
+        const metaIds: string[] = [];
+        const metaArrays: string[][] = [];
 
         for (const file of files) {
             if (!file.content.trim()) continue;
@@ -1145,6 +1195,8 @@ export class ModeHybridRetriever {
                 chunks = this.chunkText(content);
                 this.chunkCache.set(file.id, { hash: contentHash, chunks });
             }
+            metaIds.push(file.id);
+            metaArrays.push(chunks);
 
             for (let i = 0; i < chunks.length; i++) {
                 candidates.push({
@@ -1158,6 +1210,7 @@ export class ModeHybridRetriever {
             }
         }
 
+        this.fullPoolMeta.set(candidates, { ids: metaIds, arrays: metaArrays });
         return candidates;
     }
 
@@ -1237,12 +1290,29 @@ export class ModeHybridRetriever {
 
     private lexicalStatsFor(pool: ChunkCandidate[]): { stats: LexicalStats | null; index: Map<string, number> } {
         if (this.lexicalStatsCache?.pool === pool) return this.lexicalStatsCache;
+        // ACROSS QUESTIONS (autopilot 2026-11-27): getModeFileChunks() returns a new array every retrieve(), so the
+        // identity check above never held from one question to the next and a ~500k-token file rebuilt its idf table
+        // (~150 ms) on every question. A FULL pool built from the same per-file chunk arrays (chunkCache, stable while
+        // the content is unchanged), in the same order, has the same texts at the same positions: reuse its stats.
+        // Optional: a caller that borrows this method with its own `this` (LexicalFloorScaleF23) has no pool meta.
+        const meta = this.fullPoolMeta?.get(pool);
+        const prev = this.lexicalStatsByChunks;
+        if (meta && prev && prev.ids.length === meta.ids.length
+            && prev.ids.every((id, i) => id === meta.ids[i] && prev.arrays[i] === meta.arrays[i])) {
+            this.lexicalStatsCache = { pool, stats: prev.stats, index: prev.index };
+            return this.lexicalStatsCache;
+        }
         const stats = buildLexicalStats(pool.map((c) => c.text));
         const index = new Map<string, number>();
         pool.forEach((c, i) => index.set(`${c.sourceId}:${c.chunkIndex}`, i));
         this.lexicalStatsCache = { pool, stats, index };
+        if (meta) this.lexicalStatsByChunks = { ids: meta.ids, arrays: meta.arrays, stats, index };
         return this.lexicalStatsCache;
     }
+
+    /** Which per-file chunk arrays a full pool from getModeFileChunks() was built from, in order. */
+    private fullPoolMeta = new WeakMap<ChunkCandidate[], { ids: string[]; arrays: string[][] }>();
+    private lexicalStatsByChunks: { ids: string[]; arrays: string[][]; stats: LexicalStats | null; index: Map<string, number> } | null = null;
 
     private idfQueryWords = new WeakMap<Set<string>, Set<string>>();
 
@@ -1352,7 +1422,7 @@ export class ModeHybridRetriever {
     /**
      * Compute cosine similarity between query embedding and chunk embedding
      */
-    private computeVectorScore(queryEmbedding: number[], chunkEmbedding: number[]): number {
+    private computeVectorScore(queryEmbedding: ArrayLike<number>, chunkEmbedding: ArrayLike<number>): number {
         if (queryEmbedding.length !== chunkEmbedding.length) return 0;
 
         let dotProduct = 0;
@@ -2578,6 +2648,12 @@ export class ModeHybridRetriever {
         // loaded from SQLite below; the per-question cost is one query embed
         // + a cosine loop, instead of the old re-embed-every-chunk JIT path
         // that burned the latency budget on every turn.
+        // Sub-stage timings for the E2E stage trace (same switches as markH4HybridStage in retrieve()).
+        const h4 = process.env.NATIVELY_E2E === '1' && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+        const h4t0 = Date.now();
+        const h4mark = (stage: string, details: Record<string, unknown> = {}) => {
+            if (h4) console.log('[TRACE:H4-HYBRID-INNER]', JSON.stringify({ stage, atMs: Date.now() - h4t0, ...details }));
+        };
         let queryEmbedding: number[];
         try {
             queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(
@@ -2592,6 +2668,7 @@ export class ModeHybridRetriever {
             throw new Error('Query embedding failed: ' + error + healthNote);
         }
 
+        h4mark('query_embedded');
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
         const fileIds = [...new Set(candidates.map(c => c.sourceId))];
         // Space identity gate: vectors are only comparable within the same
@@ -2629,13 +2706,14 @@ export class ModeHybridRetriever {
             console.warn(`[ModeHybridRetriever] ${staleFileIds.size} file(s) were indexed under an older chunker/content hash — ignoring their stored vectors this turn and re-indexing in the background`);
         }
         const freshFileIds = fileIds.filter((id) => !staleFileIds.has(id));
-        const persisted = activeSpace && freshFileIds.length ? this.loadPersistedEmbeddings(freshFileIds, activeSpace) : new Map<string, number[]>();
+        const persisted = activeSpace && freshFileIds.length ? this.loadPersistedEmbeddings(freshFileIds, activeSpace) : new Map<string, ArrayLike<number>>();
 
         // Chunks WITHOUT a usable persisted vector (cold DB, brand-new upload,
         // provider/space change) keep the pre-W3 behavior: batch-embed them
         // ephemerally for THIS query so semantic matching never regresses.
         // Once upload-time indexing lands (kicked below), this list is empty
         // and the hot path is one query embed + a cosine loop.
+        h4mark('vectors_loaded', { persisted: persisted.size });
         const missing = candidates.filter(c => !persisted.has(`${c.sourceId}:${c.chunkIndex}`));
         diagLog('HYBRID performHybrid vectors', { activeSpace, totalCandidates: candidates.length, persistedHits: persisted.size, missingCount: missing.length });
         const ephemeral = new Map<string, number[]>();
@@ -2729,7 +2807,9 @@ export class ModeHybridRetriever {
         // embed failure) — their score is lexical-only and must be judged on
         // the lexical scale (F23), not against the combined floor.
         const vectorless = new Set<string>();
+        h4mark('ephemeral_done');
         const lexical = this.lexicalScores(candidates, queryWords);
+        h4mark('lexical_scored');
         for (let ci = 0; ci < candidates.length; ci++) {
             const candidate = candidates[ci];
             const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
@@ -2740,6 +2820,7 @@ export class ModeHybridRetriever {
             const vectorScore = vec ? this.computeVectorScore(queryEmbedding, vec) : 0;
             scored.push({ ...candidate, ftsScore, vectorScore, ...(anchorScore > 0 ? { anchorScore } : {}) });
         }
+        h4mark('cosine_scored');
         if (vectorStats) {
             vectorStats.scored = candidates.length;
             vectorStats.withVector = candidates.length - vectorless.size;

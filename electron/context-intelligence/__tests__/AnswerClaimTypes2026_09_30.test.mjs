@@ -119,7 +119,8 @@ describe('heard commitment questions get the notice next to the question', () =>
   test('ordinary questions, typed turns, and recruiting/lecture stay free of it', () => {
     assert.equal(composer.personalCommitmentNotice('How do goroutines get scheduled?', 'technical-interview', true), '');
     assert.equal(composer.personalCommitmentNotice('Tell me about Project Tern.', 'looking-for-work', true), '');
-    assert.equal(composer.personalCommitmentNotice('Would you be open to relocating?', 'looking-for-work', false), '');
+    // Typed in a job mode since 2026-11-27: the typed-commitment notice (InterviewNoGapNarration2026_11_27), not the heard one.
+    assert.equal(composer.personalCommitmentNotice('Would you be open to relocating?', 'looking-for-work', false), composer.TYPED_COMMITMENT_NOTICE);
     assert.equal(composer.personalCommitmentNotice('Would I need to relocate for this?', 'recruiting', true), '');
     assert.equal(composer.personalCommitmentNotice('Why did the empire leave the province?', 'lecture', true), '');
     const p = compose(heard('How do goroutines get scheduled?', 'technical-interview'), 'technical-interview', { heardQuestion: true });

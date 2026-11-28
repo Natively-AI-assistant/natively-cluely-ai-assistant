@@ -43,10 +43,15 @@ describe('which turns are verified', () => {
   });
   test('Looking for work answers in one pass too: no turn is verified, heard or typed (2026-10-15)', () => {
     assert.equal(process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW, undefined, 'the comparison switch must be unset for this suite');
-    for (const surface of ['spoken', 'typed', undefined]) {
-      assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x', surface }), null);
-      assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'What would you say is your biggest weakness?', draft: "I've had to work on scope, and on my last project I sat on a blocker too long.", surface }), null);
-    }
+    // The 2026-11-27 commitment-question experiment (ClaimVerifierCommitment2026_11_27) checks a SPOKEN "why leave?";
+    // switched off here, this is the 2026-10-15 decision as it stands without it.
+    process.env.NATIVELY_VERIFY_COMMITMENT = '0';
+    try {
+      for (const surface of ['spoken', 'typed', undefined]) {
+        assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x', surface }), null);
+        assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'What would you say is your biggest weakness?', draft: "I've had to work on scope, and on my last project I sat on a blocker too long.", surface }), null);
+      }
+    } finally { delete process.env.NATIVELY_VERIFY_COMMITMENT; }
   });
   test('comparison switch on: every Looking-for-work turn is verified again', () => withInterviewPass(() => {
     for (const surface of ['spoken', 'typed', undefined]) assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x', surface }), 'personal');

@@ -173,6 +173,8 @@ export interface BridgeInput {
   modeNotes?: string;
   /** "Use in every answer" skills (SkillsManager.getAlwaysOnPromptBlock). See ComposeInput.standingSkills. */
   standingSkills?: string;
+  /** Rule-headed sections of the mode's reference files (ModesManager.getActiveModeAnsweringRules). See ComposeInput.answeringRules. */
+  answeringRules?: string;
   /**
    * The user's GitHub repository briefs, cut to this question (#781,
    * services/repoBrief). Undefined: read here from the question. '' sends none.
@@ -658,12 +660,14 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       userBio,
       modeNotes: input.modeNotes,
       standingSkills: input.standingSkills,
+      answeringRules: input.answeringRules,
       codeRepos,
       diagramTurn,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
       heardQuestion: input.surface === 'what-to-answer' && input.questionSpeaker !== 'user',
       questionSpokenByUser: input.surface === 'what-to-answer' && input.questionSpeaker === 'user',
+      typedByUser: input.surface === 'manual-chat',
       readingSurface: input.readingSurface === true,
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered
